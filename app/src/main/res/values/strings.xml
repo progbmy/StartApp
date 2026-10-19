@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">StartApp</string>
+    <string name="tool_bar_title">Меню</string>
+    <string name="action_back">Назад</string>
+    <string name="app_details_about">О приложении</string>
+    <string name="app_details_developer">Разработчик</string>
+    <string name="app_details_version">Версия</string>
+    <string name="app_details_size">Размер</string>
+    <string name="app_details_category">Категория</string>
+    <string name="app_details_download">Установить</string>
+    <string name="app_details_download_started">Загрузка «%1$s» началась</string>
+    <string name="app_details_similar">Вам может понравиться</string>
 </resources>
