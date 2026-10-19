@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             StartAppTheme {
-                ReadApp(apps = sampleApps)
+                StartAppNavHost(apps = sampleApps)
             }
         }
     }
