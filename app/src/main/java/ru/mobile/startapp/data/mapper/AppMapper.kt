@@ -1,6 +1,7 @@
 package ru.mobile.startapp.data.mapper
 
 import ru.mobile.startapp.data.source.local.AppDto
+import ru.mobile.startapp.data.source.network.CatalogAppDto
 import ru.mobile.startapp.domain.App
 
 /**
@@ -12,7 +13,7 @@ import ru.mobile.startapp.domain.App
  */
 object AppMapper {
 
-    /** DTO → Domain */
+    /** Локальный DTO → Domain */
     fun AppDto.toDomain(): App = App(
         id = id,
         name = name,
@@ -24,6 +25,14 @@ object AppMapper {
         fullDescription = fullDescription
     )
 
-    /** Список DTO → список доменных моделей */
+    /** Сетевой DTO → Domain */
+    fun CatalogAppDto.toDomain(): App = App(
+        id = id,
+        name = name,
+        description = description,
+        category = category
+    )
+
+    /** Список локальных DTO → список доменных моделей */
     fun List<AppDto>.toDomainList(): List<App> = map(AppDto::toDomain)
 }
