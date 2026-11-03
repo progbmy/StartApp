@@ -4,10 +4,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import ru.mobile.startapp.data.mapper.toDomainList
+import ru.mobile.startapp.data.source.local.DemoAppDataSource
+import ru.mobile.startapp.domain.repository.AppRepository
 
 class DemoAppRepositoryTest {
 
-    private val repository = DemoAppRepository()
+    private val repository = DemoAppRepositoryImpl()
+
+    private val demoApps: List<ru.mobile.startapp.domain.App> =
+        DemoAppDataSource.apps.toDomainList()
 
     @Test
     fun appById_returnsAppByIdOrNull() {

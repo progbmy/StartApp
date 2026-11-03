@@ -1,9 +1,10 @@
 package ru.mobile.startapp.data
 
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import ru.mobile.startapp.data.mapper.AppMapper.toDomainList
+import ru.mobile.startapp.data.mapper.toDomainList
 import ru.mobile.startapp.data.source.local.DemoAppDataSource
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
@@ -21,7 +22,7 @@ import ru.mobile.startapp.domain.repository.AppRepository
  * новую реализацию [AppRepository], доменная модель и представление
  * останутся без изменений.
  */
-class DemoAppRepository : AppRepository {
+class DemoAppRepositoryImpl @Inject constructor() : AppRepository {
 
     private val _apps = MutableStateFlow(DemoAppDataSource.apps.toDomainList())
     override val apps: StateFlow<List<App>> = _apps.asStateFlow()

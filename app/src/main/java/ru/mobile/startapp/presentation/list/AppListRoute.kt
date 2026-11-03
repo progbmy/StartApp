@@ -5,20 +5,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import ru.mobile.startapp.domain.App
-import ru.mobile.startapp.domain.repository.AppRepository
 
 /**
- * Связка экрана списка с ViewModel: собирает состояние,
- * сам экран остаётся stateless и легко проверяется превью.
+ * Связка экрана списка с ViewModel.
+ *
+ * ViewModel создаётся через Hilt — [AppRepository] подставляется автоматически.
  */
 @Composable
 fun AppListRoute(
-    repository: AppRepository,
     onAppClick: (App) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val viewModel: AppListViewModel = viewModel(factory = AppListViewModel.factory(repository))
+    val viewModel: AppListViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     AppListScreen(

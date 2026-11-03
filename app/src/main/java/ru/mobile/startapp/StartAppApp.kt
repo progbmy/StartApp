@@ -1,14 +1,13 @@
 package ru.mobile.startapp
 
 import android.app.Application
-import ru.mobile.startapp.data.DemoAppRepository
-import ru.mobile.startapp.domain.repository.AppRepository
+import dagger.hilt.android.HiltAndroidApp
 
 /**
- * Ручной DI-контейнер вместо Hilt: репозиторий создаётся один раз на процесс
- * и передаётся во ViewModel через фабрики.
+ * Приложение с Hilt DI.
+ *
+ * @HiltAndroidApp запускает процесс компиляции Hilt — генерирует
+ * HiltApplication и компонент SingletonComponent.
  */
-class StartAppApp : Application() {
-
-    val appRepository: AppRepository by lazy { DemoAppRepository() }
-}
+@HiltAndroidApp
+class StartAppApp : Application()
