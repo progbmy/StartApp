@@ -10,4 +10,5 @@
     <string name="app_details_download">Установить</string>
     <string name="app_details_download_started">Загрузка «%1$s» началась</string>
     <string name="app_details_similar">Вам может понравиться</string>
+    <string name="app_details_not_found">Приложение не найдено</string>
 </resources>
