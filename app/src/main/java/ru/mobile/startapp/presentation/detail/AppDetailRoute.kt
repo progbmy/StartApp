@@ -12,20 +12,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.mobile.startapp.R
 import ru.mobile.startapp.domain.App
-import ru.mobile.startapp.domain.repository.AppRepository
 
 /**
  * Связка экрана карточки с ViewModel.
+ *
+ * ViewModel создаётся через Hilt — [AppRepository] подставляется автоматически.
  * Здесь же живут UI-эффекты: снекбар по разовому событию из ViewModel.
  */
 @Composable
 fun AppDetailRoute(
-    repository: AppRepository,
     onBack: () -> Unit,
     onSimilarAppClick: (App) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val viewModel: AppDetailViewModel = viewModel(factory = AppDetailViewModel.factory(repository))
+    val viewModel: AppDetailViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }

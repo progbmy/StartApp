@@ -2,12 +2,12 @@ package ru.mobile.startapp.presentation.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import ru.mobile.startapp.domain.repository.AppRepository
 import ru.mobile.startapp.presentation.detail.AppDetailRoute
 import ru.mobile.startapp.presentation.detail.AppDetailViewModel
 import ru.mobile.startapp.presentation.list.AppListRoute
@@ -17,9 +17,11 @@ import ru.mobile.startapp.presentation.list.AppListRoute
  *
  * Системная кнопка «назад» и кнопка в тулбаре работают через back stack NavHost,
  * id приложения едет аргументом маршрута и попадает в SavedStateHandle ViewModel.
+ *
+ * ViewModels создаются через Hilt — зависимости подставляются автоматически.
  */
 @Composable
-fun StartAppNavHost(repository: AppRepository, modifier: Modifier = Modifier) {
+fun StartAppNavHost(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
 
     NavHost(
@@ -29,7 +31,6 @@ fun StartAppNavHost(repository: AppRepository, modifier: Modifier = Modifier) {
     ) {
         composable(route = AppRoutes.LIST) {
             AppListRoute(
-                repository = repository,
                 onAppClick = { app -> navController.navigate(AppRoutes.detail(app.id)) }
             )
         }
@@ -41,7 +42,6 @@ fun StartAppNavHost(repository: AppRepository, modifier: Modifier = Modifier) {
             )
         ) {
             AppDetailRoute(
-                repository = repository,
                 onBack = { navController.popBackStack() },
                 onSimilarAppClick = { app -> navController.navigate(AppRoutes.detail(app.id)) }
             )

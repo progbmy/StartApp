@@ -2,11 +2,8 @@ package ru.mobile.startapp.presentation.detail
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,6 +14,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
+import javax.inject.Inject
 
 /** Состояние карточки приложения. */
 sealed interface AppDetailUiState {
@@ -34,10 +32,12 @@ enum class AppDetailEvent { InstallStarted }
 /**
  * ViewModel карточки приложения.
  *
+ * [AppRepository] подставляется через Hilt DI.
  * id приложения приходит из аргументов маршрута через [SavedStateHandle],
  * поэтому экран восстанавливается после смерти процесса и поворота.
  */
-class AppDetailViewModel(
+@HiltViewModel
+class AppDetailViewModel @Inject constructor(
     private val repository: AppRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -74,9 +74,5 @@ class AppDetailViewModel(
 
         /** Ключ аргумента маршрута с id приложения. */
         const val ARG_APP_ID = "appId"
-
-        fun factory(repository: AppRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { AppDetailViewModel(repository, createSavedStateHandle()) }
-        }
     }
 }

@@ -1,16 +1,15 @@
 package ru.mobile.startapp.presentation.list
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
+import javax.inject.Inject
 
 /** Состояние экрана списка приложений. */
 sealed interface AppListUiState {
@@ -23,8 +22,13 @@ sealed interface AppListUiState {
 /**
  * ViewModel списка: подписывается на каталог из репозитория
  * и отдаёт экрану готовое состояние.
+ *
+ * [AppRepository] подставляется через Hilt DI.
  */
-class AppListViewModel(repository: AppRepository) : ViewModel() {
+@HiltViewModel
+class AppListViewModel @Inject constructor(
+    private val repository: AppRepository
+) : ViewModel() {
 
     val uiState: StateFlow<AppListUiState> = repository.apps
         .map { apps -> AppListUiState.Content(apps) }
@@ -33,11 +37,4 @@ class AppListViewModel(repository: AppRepository) : ViewModel() {
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = AppListUiState.Loading
         )
-
-    companion object {
-
-        fun factory(repository: AppRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { AppListViewModel(repository) }
-        }
-    }
 }
