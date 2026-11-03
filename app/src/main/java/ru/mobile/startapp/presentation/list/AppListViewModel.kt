@@ -9,8 +9,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import ru.mobile.startapp.data.App
-import ru.mobile.startapp.data.AppRepository
+import ru.mobile.startapp.domain.App
+import ru.mobile.startapp.domain.repository.AppRepository
 
 /** Состояние экрана списка приложений. */
 sealed interface AppListUiState {

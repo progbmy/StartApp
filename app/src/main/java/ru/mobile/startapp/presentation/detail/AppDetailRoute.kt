@@ -11,8 +11,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.mobile.startapp.R
-import ru.mobile.startapp.data.App
-import ru.mobile.startapp.data.AppRepository
+import ru.mobile.startapp.domain.App
+import ru.mobile.startapp.domain.repository.AppRepository
 
 /**
  * Связка экрана карточки с ViewModel.

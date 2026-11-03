@@ -5,8 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import ru.mobile.startapp.data.App
-import ru.mobile.startapp.data.AppRepository
+import ru.mobile.startapp.domain.App
+import ru.mobile.startapp.domain.repository.AppRepository
 
 /**
  * Связка экрана списка с ViewModel: собирает состояние,

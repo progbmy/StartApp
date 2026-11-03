@@ -45,8 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ru.mobile.startapp.R
-import ru.mobile.startapp.data.App
-import ru.mobile.startapp.data.demoApps
+import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.presentation.components.LoadingState
 import ru.mobile.startapp.presentation.components.MessageState
 import ru.mobile.startapp.presentation.icon
@@ -363,8 +362,8 @@ private fun AppDetailContentPreview() {
     StartAppTheme {
         AppDetailScreen(
             uiState = AppDetailUiState.Content(
-                app = demoApps.first(),
-                similarApps = demoApps.drop(1).take(4)
+                app = demoAppsPreview[0],
+                similarApps = demoAppsPreview.drop(1).take(4)
             ),
             snackbarHostState = remember { SnackbarHostState() },
             onInstallClick = {},
@@ -387,3 +386,57 @@ private fun AppDetailNotFoundPreview() {
         )
     }
 }
+
+/** Демо-данные для превью: доменные модели. */
+private val demoAppsPreview = listOf(
+    ru.mobile.startapp.domain.App(
+        id = "browser", name = "Браузер",
+        description = "Быстрый поиск в интернете и просмотр сайтов",
+        category = "Интернет",
+        developer = "StartApp Studio",
+        version = "2.4.1",
+        size = "38 МБ",
+        fullDescription = "Браузер с поиском в один тап, вкладками, режимом " +
+            "инкогнито и блокировкой всплывающих окон."
+    ),
+    ru.mobile.startapp.domain.App(
+        id = "mail", name = "Почта",
+        description = "Просмотр писем, уведомления о новых сообщениях",
+        category = "Связь",
+        developer = "StartApp Studio",
+        version = "1.9.0",
+        size = "24 МБ",
+        fullDescription = "Почтовый клиент с поддержкой нескольких ящиков, " +
+            "поиском по письмам и уведомлениями о новой почте."
+    ),
+    ru.mobile.startapp.domain.App(
+        id = "gallery", name = "Галерея",
+        description = "Все фото и видео на устройстве в одном месте",
+        category = "Медиа",
+        developer = "StartApp Studio",
+        version = "3.0.2",
+        size = "52 МБ",
+        fullDescription = "Собирает фото и видео по альбомам, умеет искать " +
+            "по датам и местам съёмки, поддерживает обрезку и поворот."
+    ),
+    ru.mobile.startapp.domain.App(
+        id = "music", name = "Музыка",
+        description = "Плеер, плейлисты и любимые исполнители",
+        category = "Медиа",
+        developer = "StartApp Studio",
+        version = "2.2.7",
+        size = "31 МБ",
+        fullDescription = "Плеер для локальной музыки: плейлисты, очередь " +
+            "воспроизведения и эквалайзер."
+    ),
+    ru.mobile.startapp.domain.App(
+        id = "navigator", name = "Навигатор",
+        description = "Маршруты, пробки и поиск адресов",
+        category = "Путешествия",
+        developer = "StartApp Maps",
+        version = "5.1.3",
+        size = "76 МБ",
+        fullDescription = "Прокладывает маршруты с учётом пробок, ведёт " +
+            "голосовые подсказки и предупреждает о камерах."
+    )
+)
