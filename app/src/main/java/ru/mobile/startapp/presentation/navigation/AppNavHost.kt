@@ -7,7 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import ru.mobile.startapp.data.AppRepository
+import ru.mobile.startapp.domain.repository.AppRepository
 import ru.mobile.startapp.presentation.detail.AppDetailRoute
 import ru.mobile.startapp.presentation.detail.AppDetailViewModel
 import ru.mobile.startapp.presentation.list.AppListRoute

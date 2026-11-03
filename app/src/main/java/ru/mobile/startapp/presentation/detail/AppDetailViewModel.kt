@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import ru.mobile.startapp.data.App
-import ru.mobile.startapp.data.AppRepository
+import ru.mobile.startapp.domain.App
+import ru.mobile.startapp.domain.repository.AppRepository
 
 /** Состояние карточки приложения. */
 sealed interface AppDetailUiState {

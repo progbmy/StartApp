@@ -1,12 +1,15 @@
-package ru.mobile.startapp.data
+package ru.mobile.startapp.domain.repository
 
 import kotlinx.coroutines.flow.StateFlow
+import ru.mobile.startapp.domain.App
 
 /**
- * Контракт источника данных каталога приложений.
+ * Порт (контракт) источника данных каталога приложений.
  *
  * Каталог отдаётся потоком, чтобы ViewModel подписывалась на изменения,
  * а экраны не запрашивали данные вручную.
+ *
+ * Зависит только от доменных моделей — это правило Clean Architecture.
  */
 interface AppRepository {
 

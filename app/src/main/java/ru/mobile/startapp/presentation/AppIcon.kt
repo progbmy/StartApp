@@ -11,7 +11,7 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.ui.graphics.vector.ImageVector
-import ru.mobile.startapp.data.App
+import ru.mobile.startapp.domain.App
 
 /**
  * Иконка приложения для UI.

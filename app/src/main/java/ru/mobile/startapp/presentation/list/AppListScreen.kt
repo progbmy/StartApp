@@ -36,8 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ru.mobile.startapp.R
-import ru.mobile.startapp.data.App
-import ru.mobile.startapp.data.demoApps
+import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.presentation.components.LoadingState
 import ru.mobile.startapp.presentation.icon
 import ru.mobile.startapp.ui.theme.StartAppTheme
@@ -191,7 +190,7 @@ private fun AppCard(app: App, onClick: () -> Unit, modifier: Modifier = Modifier
 private fun AppListScreenPreview() {
     StartAppTheme {
         AppListScreen(
-            uiState = AppListUiState.Content(demoApps),
+            uiState = AppListUiState.Content(demoAppsPreview),
             onAppClick = {}
         )
     }
@@ -207,3 +206,22 @@ private fun AppListLoadingPreview() {
         )
     }
 }
+
+/** Демо-данные для превью: доменные модели, а не DTO. */
+private val demoAppsPreview = listOf(
+    ru.mobile.startapp.domain.App(
+        id = "browser", name = "Браузер",
+        description = "Быстрый поиск в интернете и просмотр сайтов",
+        category = "Интернет"
+    ),
+    ru.mobile.startapp.domain.App(
+        id = "mail", name = "Почта",
+        description = "Просмотр писем, уведомления о новых сообщениях",
+        category = "Связь"
+    ),
+    ru.mobile.startapp.domain.App(
+        id = "gallery", name = "Галерея",
+        description = "Все фото и видео на устройстве в одном месте",
+        category = "Медиа"
+    )
+)
