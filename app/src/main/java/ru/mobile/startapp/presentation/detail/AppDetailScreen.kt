@@ -17,14 +17,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -82,6 +86,7 @@ fun AppDetailScreen(
             is AppDetailUiState.Content -> DetailContent(
                 app = uiState.app,
                 similarApps = uiState.similarApps,
+                installState = uiState.installState,
                 onInstallClick = onInstallClick,
                 onSimilarAppClick = onSimilarAppClick,
                 modifier = Modifier.padding(innerPadding)
@@ -130,6 +135,7 @@ private fun DetailToolBar(title: String, onBack: () -> Unit, modifier: Modifier 
 private fun DetailContent(
     app: App,
     similarApps: List<App>,
+    installState: InstallState,
     onInstallClick: () -> Unit,
     onSimilarAppClick: (App) -> Unit,
     modifier: Modifier = Modifier
@@ -190,18 +196,10 @@ private fun DetailContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        Button(
-            onClick = onInstallClick,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(
-                imageVector = Icons.Default.Download,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = stringResource(R.string.app_details_download))
-        }
+        InstallButton(
+            installState = installState,
+            onInstallClick = onInstallClick
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -238,6 +236,86 @@ private fun DetailContent(
                 apps = similarApps,
                 onAppClick = onSimilarAppClick
             )
+        }
+    }
+}
+
+/**
+ * Кнопка установки: «Установить» → «Отменить» во время установки.
+ *
+ * Пока идёт эмуляция ([InstallState.Installing]), вместо «Установить» показывается
+ * «Отменить» и полоса прогресса; по завершении — «Установлено».
+ */
+@Composable
+private fun InstallButton(
+    installState: InstallState,
+    onInstallClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        when (installState) {
+            InstallState.NotInstalled -> Button(
+                onClick = onInstallClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = stringResource(R.string.app_details_download))
+            }
+
+            is InstallState.Installing -> {
+                Button(
+                    onClick = onInstallClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(R.string.app_details_install_cancel))
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LinearProgressIndicator(
+                    progress = { installState.progress / 100f },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = stringResource(R.string.app_details_install_progress, installState.progress),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            InstallState.Installed -> Button(
+                onClick = onInstallClick,
+                enabled = false,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = stringResource(R.string.app_details_installed))
+            }
         }
     }
 }
