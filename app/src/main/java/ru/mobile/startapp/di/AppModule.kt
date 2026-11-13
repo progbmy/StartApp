@@ -4,19 +4,19 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import ru.mobile.startapp.data.DemoAppRepositoryImpl
+import ru.mobile.startapp.data.NetworkAppRepository
 import ru.mobile.startapp.domain.repository.AppRepository
 
 /**
- * Hilt-модуль для绑定 [AppRepository].
+ * Hilt-модуль для биндинга [AppRepository].
  *
- * Связывает интерфейс [AppRepository] с реализацией [DemoAppRepositoryImpl]
- * через @Binds — при запросе AppRepository Hilt подставит DemoAppRepositoryImpl.
+ * Связывает интерфейс [AppRepository] с реализацией [NetworkAppRepository]
+ * через @Binds — при запросе AppRepository Hilt подставит сетевую реализацию.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class AppModule {
 
     @Binds
-    abstract fun bindAppRepository(impl: DemoAppRepositoryImpl): AppRepository
+    abstract fun bindAppRepository(impl: NetworkAppRepository): AppRepository
 }
