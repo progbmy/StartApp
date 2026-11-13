@@ -2,7 +2,9 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
-    kotlin(kotlin.kapt)
+    // kapt в AGP 9: built-in Kotlin не совместим с org.jetbrains.kotlin.kapt,
+    // штатный путь — com.android.legacy-kapt
+    alias(libs.plugins.android.legacy.kapt)
 }
 
 android {

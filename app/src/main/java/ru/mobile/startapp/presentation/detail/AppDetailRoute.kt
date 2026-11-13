@@ -8,8 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.mobile.startapp.R
 import ru.mobile.startapp.domain.App
 
@@ -25,7 +25,7 @@ fun AppDetailRoute(
     onSimilarAppClick: (App) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val viewModel: AppDetailViewModel = viewModel()
+    val viewModel: AppDetailViewModel = hiltViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -34,13 +34,19 @@ fun AppDetailRoute(
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
+            val appName = (currentState as? AppDetailUiState.Content)?.app?.name.orEmpty()
             when (event) {
-                AppDetailEvent.InstallStarted -> {
-                    val appName = (currentState as? AppDetailUiState.Content)?.app?.name.orEmpty()
-                    snackbarHostState.showSnackbar(
-                        context.getString(R.string.app_details_download_started, appName)
-                    )
-                }
+                AppDetailEvent.InstallStarted -> snackbarHostState.showSnackbar(
+                    context.getString(R.string.app_details_download_started, appName)
+                )
+
+                AppDetailEvent.InstallFinished -> snackbarHostState.showSnackbar(
+                    context.getString(R.string.app_details_install_finished, appName)
+                )
+
+                AppDetailEvent.InstallCancelled -> snackbarHostState.showSnackbar(
+                    context.getString(R.string.app_details_install_cancelled, appName)
+                )
             }
         }
     }

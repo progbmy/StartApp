@@ -10,29 +10,30 @@ import ru.mobile.startapp.domain.App
  * Следует правилу Clean Architecture — данные текут от внешних
  * источников (data) к ядру (domain). Представление работает только
  * с доменными моделями и не знает про DTO.
+ *
+ * Функции объявлены на верхнем уровне файла: репозитории импортируют их
+ * напрямую (`import ru.mobile.startapp.data.mapper.toDomain`).
  */
-object AppMapper {
 
-    /** Локальный DTO → Domain */
-    fun AppDto.toDomain(): App = App(
-        id = id,
-        name = name,
-        description = description,
-        category = category,
-        developer = developer,
-        version = version,
-        size = size,
-        fullDescription = fullDescription
-    )
+/** Локальный DTO → Domain */
+fun AppDto.toDomain(): App = App(
+    id = id,
+    name = name,
+    description = description,
+    category = category,
+    developer = developer,
+    version = version,
+    size = size,
+    fullDescription = fullDescription
+)
 
-    /** Сетевой DTO → Domain */
-    fun CatalogAppDto.toDomain(): App = App(
-        id = id,
-        name = name,
-        description = description,
-        category = category
-    )
+/** Сетевой DTO → Domain */
+fun CatalogAppDto.toDomain(): App = App(
+    id = id,
+    name = name,
+    description = description,
+    category = category
+)
 
-    /** Список локальных DTO → список доменных моделей */
-    fun List<AppDto>.toDomainList(): List<App> = map(AppDto::toDomain)
-}
+/** Список локальных DTO → список доменных моделей */
+fun List<AppDto>.toDomainList(): List<App> = map { it.toDomain() }

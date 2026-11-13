@@ -16,6 +16,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,18 +40,21 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ru.mobile.startapp.R
 import ru.mobile.startapp.domain.App
+import ru.mobile.startapp.domain.usecase.RatingsLoadResult
 import ru.mobile.startapp.presentation.components.LoadingState
 import ru.mobile.startapp.presentation.icon
 import ru.mobile.startapp.ui.theme.StartAppTheme
+import java.util.Locale
 
 /**
- * Экран списка приложений: тулбар и вертикальный список.
+ * Экран списка приложений: тулбар, блок замера рейтингов и вертикальный список.
  * Состояние приходит снаружи, экран ничего не знает про ViewModel.
  */
 @Composable
 fun AppListScreen(
     uiState: AppListUiState,
     onAppClick: (App) -> Unit,
+    onRerunRatings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -59,7 +65,12 @@ fun AppListScreen(
             AppListUiState.Loading -> LoadingState(modifier = Modifier.padding(innerPadding))
             is AppListUiState.Content -> ListApp(
                 listApp = uiState.apps,
+                ratings = uiState.ratings,
+                sequential = uiState.sequential,
+                parallel = uiState.parallel,
+                runningMode = uiState.runningMode,
                 onAppClick = onAppClick,
+                onRerunRatings = onRerunRatings,
                 modifier = Modifier.padding(innerPadding)
             )
         }
@@ -97,12 +108,17 @@ private fun ToolBar(modifier: Modifier = Modifier) {
 }
 
 /**
- * Вертикальный список приложений.
+ * Вертикальный список приложений: сверху блок с результатами замера рейтингов.
  */
 @Composable
 private fun ListApp(
     listApp: List<App>,
+    ratings: Map<String, Float>,
+    sequential: RatingsLoadResult?,
+    parallel: RatingsLoadResult?,
+    runningMode: RatingLoadMode?,
     onAppClick: (App) -> Unit,
+    onRerunRatings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -110,9 +126,19 @@ private fun ListApp(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(items = listApp) { app ->
+        item {
+            RatingsBenchmarkCard(
+                sequential = sequential,
+                parallel = parallel,
+                runningMode = runningMode,
+                onRerun = onRerunRatings
+            )
+        }
+
+        items(items = listApp, key = { it.id }) { app ->
             AppCard(
                 app = app,
+                rating = ratings[app.id],
                 onClick = { onAppClick(app) }
             )
         }
@@ -120,10 +146,134 @@ private fun ListApp(
 }
 
 /**
- * Карточка приложения в списке: иконка, название, описание, категория.
+ * Блок замера: время последовательной и параллельной загрузки рейтингов.
+ *
+ * Время снимается в [ru.mobile.startapp.domain.usecase.LoadRatingsUseCase]
+ * через `measureTimeMillis`, здесь только показывается.
  */
 @Composable
-private fun AppCard(app: App, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun RatingsBenchmarkCard(
+    sequential: RatingsLoadResult?,
+    parallel: RatingsLoadResult?,
+    runningMode: RatingLoadMode?,
+    onRerun: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.list_ratings_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.size(4.dp))
+
+            Text(
+                text = stringResource(R.string.list_ratings_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.size(12.dp))
+
+            RatingResultRow(
+                label = stringResource(R.string.list_ratings_sequential_label),
+                result = sequential,
+                running = runningMode == RatingLoadMode.Sequential
+            )
+
+            Spacer(modifier = Modifier.size(6.dp))
+
+            RatingResultRow(
+                label = stringResource(R.string.list_ratings_parallel_label),
+                result = parallel,
+                running = runningMode == RatingLoadMode.Parallel
+            )
+
+            if (sequential != null && parallel != null && parallel.elapsedMs > 0) {
+                Spacer(modifier = Modifier.size(10.dp))
+                Text(
+                    text = stringResource(
+                        R.string.list_ratings_speedup,
+                        formatDecimal(sequential.elapsedMs.toFloat() / parallel.elapsedMs.toFloat())
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.size(12.dp))
+
+            Button(onClick = onRerun, modifier = Modifier.fillMaxWidth()) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = stringResource(R.string.list_ratings_retry))
+            }
+        }
+    }
+}
+
+/**
+ * Строка результата: подпись способа слева, время и число запросов справа.
+ */
+@Composable
+private fun RatingResultRow(
+    label: String,
+    result: RatingsLoadResult?,
+    running: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        when {
+            running -> Text(
+                text = stringResource(R.string.list_ratings_running),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            result == null -> Text(
+                text = "—",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            else -> Text(
+                text = formatSeconds(result.elapsedMs) + " · " +
+                    stringResource(R.string.list_ratings_requests, result.requests),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/**
+ * Карточка приложения в списке: иконка, название с рейтингом, описание, категория.
+ */
+@Composable
+private fun AppCard(
+    app: App,
+    rating: Float?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -152,14 +302,36 @@ private fun AppCard(app: App, onClick: () -> Unit, modifier: Modifier = Modifier
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = app.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = app.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    if (rating != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = stringResource(R.string.list_rating_content_desc),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = formatDecimal(rating),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.size(2.dp))
+
                 Text(
                     text = app.description,
                     style = MaterialTheme.typography.bodyMedium,
@@ -167,7 +339,9 @@ private fun AppCard(app: App, onClick: () -> Unit, modifier: Modifier = Modifier
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+
                 Spacer(modifier = Modifier.size(6.dp))
+
                 Text(
                     text = app.category,
                     style = MaterialTheme.typography.labelSmall,
@@ -185,13 +359,27 @@ private fun AppCard(app: App, onClick: () -> Unit, modifier: Modifier = Modifier
     }
 }
 
+/** Время в секундах с одним знаком после запятой. */
+private fun formatSeconds(elapsedMs: Long): String =
+    String.format(Locale.getDefault(), "%.1f с", elapsedMs / 1000f)
+
+/** Число с одним знаком после запятой в текущей локали. */
+private fun formatDecimal(value: Float): String =
+    String.format(Locale.getDefault(), "%.1f", value)
+
 @Preview(showBackground = true)
 @Composable
 private fun AppListScreenPreview() {
     StartAppTheme {
         AppListScreen(
-            uiState = AppListUiState.Content(demoAppsPreview),
-            onAppClick = {}
+            uiState = AppListUiState.Content(
+                apps = demoAppsPreview,
+                ratings = mapOf("browser" to 4.5f, "mail" to 3.8f),
+                sequential = RatingsLoadResult(emptyMap(), 15_100, 10),
+                parallel = RatingsLoadResult(emptyMap(), 1_610, 10)
+            ),
+            onAppClick = {},
+            onRerunRatings = {}
         )
     }
 }
@@ -202,7 +390,8 @@ private fun AppListLoadingPreview() {
     StartAppTheme {
         AppListScreen(
             uiState = AppListUiState.Loading,
-            onAppClick = {}
+            onAppClick = {},
+            onRerunRatings = {}
         )
     }
 }
