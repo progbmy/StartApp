@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
@@ -101,7 +102,9 @@ class AppDetailViewModel @Inject constructor(
      * Нажатие кнопки установки.
      *
      * - установка уже идёт → отменяем [installJob] и возвращаем [InstallState.NotInstalled];
-     * - иначе → запускаем корутину установки в [viewModelScope] и запоминаем её в [installJob].
+     * - иначе → переводим состояние в [InstallState.Installing] **сразу** (чтобы второй
+     *   быстрый клик уже воспринимался как «Отменить», а не запускал вторую установку)
+     *   и запускаем корутину установки в [viewModelScope], запоминая её в [installJob].
      */
     fun onInstallClick() {
         val current = _installState.value
@@ -113,15 +116,18 @@ class AppDetailViewModel @Inject constructor(
             return
         }
 
+        _installState.value = InstallState.Installing(0)
+
         installJob = viewModelScope.launch {
-            _installState.value = InstallState.Installing(0)
             try {
                 emulateInstall()
                 _installState.value = InstallState.Installed
                 _events.send(AppDetailEvent.InstallFinished)
             } finally {
-                // джоба закончилась (успешно или отменой) — ссылку больше не держим
-                installJob = null
+                // джоба закончилась (успешно или отменой) — ссылку больше не держим,
+                // но не затираем ссылку на новую установку: отменённая корутина может
+                // доехать до finally уже после того, как пользователь запустил следующую
+                if (installJob == coroutineContext.job) installJob = null
             }
         }
         _events.trySend(AppDetailEvent.InstallStarted)

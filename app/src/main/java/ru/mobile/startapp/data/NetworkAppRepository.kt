@@ -1,15 +1,13 @@
 package ru.mobile.startapp.data
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import ru.mobile.startapp.data.mapper.toDomain
 import ru.mobile.startapp.data.source.network.CatalogApiService
@@ -41,23 +39,30 @@ class NetworkAppRepository @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
-        scope.launch {
-            flow {
-                val response = apiService.catalog()
-                if (response.isSuccessful) {
-                    val apps = response.body()?.map(CatalogAppDto::toDomain) ?: emptyList()
-                    emit(apps)
-                } else {
-                    emit(emptyList())
-                }
+        scope.launch { loadCatalog() }
+    }
+
+    /**
+     * Загружает каталог с сервера и кэширует результат в [apps].
+     *
+     * Неуспешный HTTP-ответ и сетевые ошибки дают пустой каталог — приложение
+     * не падает. Отмена загрузки (например, при закрытии приложения) не
+     * превращается в «ошибку сети»: [CancellationException] пробрасывается дальше.
+     */
+    suspend fun loadCatalog() {
+        try {
+            val response = apiService.catalog()
+            _apps.value = if (response.isSuccessful) {
+                response.body()?.map(CatalogAppDto::toDomain).orEmpty()
+            } else {
+                emptyList()
             }
-                .onStart { emit(_apps.value) }
-                .catch { error ->
-                    // Ошибка сети — отдаём пустой список, приложение не падает
-                    Log.w(TAG, "Каталог не загрузился: ${error.message}", error)
-                    emit(emptyList())
-                }
-                .collect { _apps.value = it }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            // Ошибка сети — отдаём пустой список, приложение не падает
+            Log.w(TAG, "Каталог не загрузился: ${error.message}", error)
+            _apps.value = emptyList()
         }
     }
 
