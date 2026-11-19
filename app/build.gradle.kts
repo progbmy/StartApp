@@ -20,7 +20,9 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Hilt-тесты: свой runner подменяет Application на HiltTestApplication,
+        // иначе @UninstallModules и тестовые модули не подхватываются
+        testInstrumentationRunner = "ru.mobile.startapp.HiltTestRunner"
     }
 
     buildTypes {
@@ -36,6 +38,14 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    testOptions {
+        unitTests {
+            // ViewModel/репозиторий логируют через android.util.Log: в JVM-тестах
+            // он не реализован (stub-класс), поэтому возвращаем дефолтные значения,
+            // а не падаем с "Method d in android.util.Log not mocked".
+            isReturnDefaultValues = true
+        }
     }
 }
 
@@ -60,10 +70,15 @@ dependencies {
     implementation(libs.converter.gson)
     implementation(libs.gson)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    // ResponseBody нужен тестам сетевого репозитория для HTTP-ошибок
+    testImplementation(libs.okhttp)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.hilt.android.testing)
+    kaptAndroidTest(libs.hilt.compiler)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
