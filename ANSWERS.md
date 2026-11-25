@@ -232,3 +232,130 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n ru.mobile.startapp/.MainActivity
 adb logcat -s AppListViewModel    # тайминги обоих способов
 ```
+
+---
+
+# ДЗ №11 — «Понравившиеся»: Entity БД, подписка на данные и кнопка в UI
+
+## Что сделано
+
+### 1. Новое поле в Entity БД (Room)
+
+`data/source/local/db/AppEntity.kt` — таблица `apps`, добавлено поле
+`isFavorite: Boolean = false`. Оно хранится только в БД: каталог из сети
+складывается в эту же таблицу (`position` сохраняет порядок сервера).
+
+`data/source/local/db/AppDao.kt`:
+
+```kotlin
+@Query("SELECT * FROM apps ORDER BY position ASC")
+fun observeApps(): Flow<List<AppEntity>>
+
+@Query("SELECT * FROM apps WHERE isFavorite = 1 ORDER BY position ASC")
+fun observeFavorites(): Flow<List<AppEntity>>
+
+@Query("SELECT * FROM apps WHERE id = :appId LIMIT 1")
+fun observeApp(appId: String): Flow<AppEntity?>
+
+@Query("UPDATE apps SET isFavorite = :isFavorite WHERE id = :appId")
+suspend fun updateFavorite(appId: String, isFavorite: Boolean)
+```
+
+`upsertCatalog` (`@Transaction`) вставляет новые строки и обновляет контентные
+поля существующих, но **не трогает `isFavorite`** — отметки переживают
+перезагрузку каталога и перезапуск приложения.
+
+`AppDatabase` (version 1, таблица `apps`) и `di/DatabaseModule.kt`
+(`@Provides @Singleton` для базы и DAO) — Hilt-граф.
+
+### 2. Мапперы
+
+`data/mapper/AppMapper.kt`:
+
+- `CatalogAppDto.toEntity(position)` — сеть → Entity, `isFavorite = false`;
+- `AppEntity.toDomain()` — Entity → Domain, переносит `isFavorite`;
+- `App.toEntity()` — Domain → Entity;
+- `List<AppEntity>.toDomainApps()` — список Entity → список Domain
+  (имя отличается от `List<AppDto>.toDomainList()`, иначе после стирания
+  дженериков совпадает JVM-сигнатура).
+
+В доменную модель `App` добавлено `isFavorite: Boolean = false`.
+
+### 3. Репозиторий: подписки и обновление поля
+
+`domain/repository/AppRepository.kt`:
+
+```kotlin
+val apps: Flow<List<App>>                 // подписка на весь каталог
+fun observeFavorites(): Flow<List<App>>   // подписка на «Понравившиеся»
+fun observeApp(appId: String): Flow<App?> // подписка на одно приложение
+suspend fun setFavorite(appId: String, isFavorite: Boolean)
+```
+
+`data/NetworkAppRepository.kt` — Single Source of Truth теперь Room:
+
+1. `init` грузит `GET /catalog` и пишет каталог в БД;
+2. `apps` / `observeFavorites` / `observeApp` читают Flow из DAO;
+3. `setFavorite` вызывает `AppDao.updateFavorite`;
+4. ошибка сети не затирает БД — подписчики продолжают видеть кэш.
+
+При повторной загрузке каталога контент обновляется, а `isFavorite` остаётся.
+
+### 4. Подписка во ViewModel через `onEach`–`launchIn`
+
+`AppDetailViewModel`:
+
+```kotlin
+private val _apps = MutableStateFlow<List<App>?>(null)
+
+init {
+    repository.apps
+        .onEach { apps -> _apps.value = apps }
+        .launchIn(viewModelScope)
+}
+```
+
+`uiState` собирается через `combine(_apps, _installState)`; нажатие
+кнопки вызывает `repository.setFavorite(...)`, после UPDATE Room сам эмитит
+новое значение — экран перерисовывается без ручного обновления состояния.
+
+Та же схема в `AppListViewModel` (плюс фильтр `_favoritesOnly`).
+
+### 5. Кнопка в интерфейсе
+
+- `AppDetailScreen`: под «Установить» — кнопка `FavoriteButton`
+  («В понравившиеся» с контуром сердца → «В понравившихся» с красным сердцем).
+- `AppListScreen`: сердечко на каждой карточке (быстрое добавление)
+  и переключатель «Понравившиеся» в тулбаре — список показывает только
+  отмеченные приложения, при пустом списке выводится подсказка.
+- Новые строки — `favorite_add/remove`, `favorite_filter_show/hide`,
+  `favorite_empty*` в `strings.xml`.
+
+## Проверка
+
+| Проверка | Результат |
+|---|---|
+| `:app:testDebugUnitTest` | 67 тестов, 0 падений |
+| `:app:connectedDebugAndroidTest` (Medium_Phone_API_35) | 36 тестов, 0 падений |
+| Карточка QuickNote → «В понравившиеся» | кнопка стала «В понравившихся», сердце красное, карточка в списке — с залитым сердцем |
+| `force-stop` + повторный запуск → фильтр «Понравившиеся» | в списке только QuickNote — данные пришли из Room |
+| `run-as ru.mobile.startapp` + `sqlite3` по `databases/startapp.db` | таблица `apps` содержит `isFavorite INTEGER NOT NULL`, у QuickNote `isFavorite = 1`, всего 41 строка |
+
+## Как воспроизвести
+
+```bash
+cd C:/Kotlin/StartApp
+export JAVA_HOME='C:\Users\skute\.jdks\corretto-21.0.4'
+./gradlew :app:assembleDebug :app:testDebugUnitTest
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n ru.mobile.startapp/.MainActivity
+```
+
+## Нюансы сборки
+
+1. Room 2.8.5 подключён через **KSP** (kapt в Room 2.8 устарел); Hilt остался
+   на `com.android.legacy-kapt` — обе кодогенерации в одном модуле работают.
+2. В `gradle.properties` добавлен `android.disallowKotlinSourceSets=false`:
+   KSP регистрирует сгенерированные исходники через `kotlin.sourceSets`,
+   а AGP 9 с built-in Kotlin это запрещает без флага.
+

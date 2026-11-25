@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -186,5 +187,56 @@ class AppListViewModelTest {
 
         assertEquals(AppListUiState.Loading, viewModel.uiState.value)
         assertTrue(api.requestedIds.isEmpty())
+    }
+
+    @Test
+    fun onFavoriteClick_updatesAppInList() = runTest(dispatcher) {
+        val viewModel = AppListViewModel(FakeAppRepository(TestData.catalog), useCase(FakeRatingApi()))
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        val browser = viewModel.content().apps.first { it.id == "browser" }
+        viewModel.onFavoriteClick(browser)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.content().apps.first { it.id == "browser" }.isFavorite)
+        assertTrue(viewModel.content().apps.none { it.id == "mail" && it.isFavorite })
+    }
+
+    @Test
+    fun onToggleFavorites_showsOnlyFavoriteApps() = runTest(dispatcher) {
+        val viewModel = AppListViewModel(FakeAppRepository(TestData.catalog), useCase(FakeRatingApi()))
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.onFavoriteClick(viewModel.content().apps.first { it.id == "music" })
+        advanceUntilIdle()
+
+        viewModel.onToggleFavorites()
+        advanceUntilIdle()
+
+        val filtered = viewModel.content()
+        assertTrue(filtered.favoritesOnly)
+        assertEquals(listOf("music"), filtered.apps.map { it.id })
+
+        viewModel.onToggleFavorites()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().favoritesOnly)
+        assertEquals(TestData.catalog.size, viewModel.content().apps.size)
+    }
+
+    @Test
+    fun favoritesFilter_withNoFavorites_givesEmptyList() = runTest(dispatcher) {
+        val viewModel = AppListViewModel(FakeAppRepository(TestData.catalog), useCase(FakeRatingApi()))
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.onToggleFavorites()
+        advanceUntilIdle()
+
+        val content = viewModel.content()
+        assertTrue(content.favoritesOnly)
+        assertTrue(content.apps.isEmpty())
     }
 }
