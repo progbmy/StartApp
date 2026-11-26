@@ -1,33 +1,23 @@
 package ru.mobile.startapp.domain.repository
 
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import ru.mobile.startapp.domain.App
 
 /**
  * Порт (контракт) источника данных каталога приложений.
  *
- * Каталог отдаётся потоком из БД: ViewModel подписывается на изменения
- * и не запрашивает данные вручную. Методы подписки:
- * - [apps] — весь каталог;
- * - [observeFavorites] — «Понравившиеся»;
- * - [observeApp] — одно приложение (карточка).
+ * Каталог отдаётся потоком, чтобы ViewModel подписывалась на изменения,
+ * а экраны не запрашивали данные вручную.
  *
- * Изменение нового поля «Понравилось» — [setFavorite].
  * Зависит только от доменных моделей — это правило Clean Architecture.
  */
 interface AppRepository {
 
-    /** Подписка на весь каталог из БД. */
-    val apps: Flow<List<App>>
+    val apps: StateFlow<List<App>>
 
-    /** Подписка на приложения, отмеченные «Понравилось». */
-    fun observeFavorites(): Flow<List<App>>
+    fun appById(appId: String?): App?
 
-    /** Подписка на приложение по id: null, если такого нет. */
-    fun observeApp(appId: String): Flow<App?>
-
-    /** Обновляет новое поле БД: отметку «Понравилось». */
-    suspend fun setFavorite(appId: String, isFavorite: Boolean)
+    fun similarApps(appId: String, limit: Int = SIMILAR_APPS_LIMIT): List<App>
 
     companion object {
         /** Сколько приложений показываем в блоке «Вам может понравиться». */

@@ -12,8 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -21,7 +19,6 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
-import ru.mobile.startapp.domain.similarApps
 import javax.inject.Inject
 
 /** Состояние установки приложения: кнопка на карточке работает по нему. */
@@ -73,12 +70,6 @@ class AppDetailViewModel @Inject constructor(
     val events: Flow<AppDetailEvent> = _events.receiveAsFlow()
 
     /**
-     * Каталог из БД. null — первая эмиссия ещё не пришла: экран показывает Loading,
-     * а не ложное «Приложение не найдено».
-     */
-    private val _apps = MutableStateFlow<List<App>?>(null)
-
-    /**
      * Прогресс установки — отдельный поток: это состояние UI, а не данные каталога.
      * В [AppDetailUiState.Content] оно попадает через [combine].
      */
@@ -87,53 +78,25 @@ class AppDetailViewModel @Inject constructor(
     /** Текущая эмуляция установки: держим ссылку, чтобы её можно было отменить. */
     private var installJob: Job? = null
 
-    init {
-        // Подписка на данные из БД: Room эмитит новое значение после каждого
-        // изменения (в том числе после setFavorite), UI перерисовывается сам.
-        repository.apps
-            .onEach { apps -> _apps.value = apps }
-            .launchIn(viewModelScope)
-    }
-
     val uiState: StateFlow<AppDetailUiState> = combine(
-        _apps,
+        repository.apps,
         _installState
     ) { apps, installState ->
-        when {
-            apps == null -> AppDetailUiState.Loading
-
-            else -> {
-                val app = apps.firstOrNull { it.id == appId }
-                if (app == null) {
-                    // каталог уже пришёл, но приложения с таким id в нём нет
-                    AppDetailUiState.NotFound
-                } else {
-                    AppDetailUiState.Content(
-                        app = app,
-                        similarApps = apps.similarApps(app.id),
-                        installState = installState
-                    )
-                }
-            }
+        val app = apps.firstOrNull { it.id == appId }
+        if (app == null) {
+            AppDetailUiState.NotFound
+        } else {
+            AppDetailUiState.Content(
+                app = app,
+                similarApps = repository.similarApps(app.id),
+                installState = installState
+            )
         }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = AppDetailUiState.Loading
     )
-
-    /**
-     * Кнопка «Понравившиеся»: переключает новое поле в БД.
-     *
-     * Состояние кнопки не хранится во ViewModel — после UPDATE Room пришлёт
-     * новое значение в [repository.apps], и `uiState` обновится подпиской.
-     */
-    fun onFavoriteClick() {
-        val app = _apps.value?.firstOrNull { it.id == appId } ?: return
-        viewModelScope.launch {
-            repository.setFavorite(appId = app.id, isFavorite = !app.isFavorite)
-        }
-    }
 
     /**
      * Нажатие кнопки установки.

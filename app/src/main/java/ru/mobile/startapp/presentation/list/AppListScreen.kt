@@ -15,8 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
@@ -37,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -57,21 +54,12 @@ import java.util.Locale
 fun AppListScreen(
     uiState: AppListUiState,
     onAppClick: (App) -> Unit,
-    onFavoriteClick: (App) -> Unit,
-    onToggleFavorites: () -> Unit,
     onRerunRatings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val favoritesOnly = (uiState as? AppListUiState.Content)?.favoritesOnly == true
-
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = {
-            ToolBar(
-                favoritesOnly = favoritesOnly,
-                onToggleFavorites = onToggleFavorites
-            )
-        }
+        topBar = { ToolBar() }
     ) { innerPadding ->
         when (uiState) {
             AppListUiState.Loading -> LoadingState(modifier = Modifier.padding(innerPadding))
@@ -81,9 +69,7 @@ fun AppListScreen(
                 sequential = uiState.sequential,
                 parallel = uiState.parallel,
                 runningMode = uiState.runningMode,
-                favoritesOnly = uiState.favoritesOnly,
                 onAppClick = onAppClick,
-                onFavoriteClick = onFavoriteClick,
                 onRerunRatings = onRerunRatings,
                 modifier = Modifier.padding(innerPadding)
             )
@@ -92,18 +78,11 @@ fun AppListScreen(
 }
 
 /**
- * Тулбар: меню, заголовок и переключатель «Понравившиеся».
- *
- * Кнопка-сердечко справа включает фильтр: в списке остаются только
- * приложения с отметкой в БД.
+ * Тулбар с иконкой слева (кнопка меню) и заголовком.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ToolBar(
-    favoritesOnly: Boolean,
-    onToggleFavorites: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun ToolBar(modifier: Modifier = Modifier) {
     TopAppBar(
         modifier = modifier,
         title = {
@@ -120,25 +99,10 @@ private fun ToolBar(
                 )
             }
         },
-        actions = {
-            IconButton(onClick = onToggleFavorites) {
-                Icon(
-                    imageVector = if (favoritesOnly) Icons.Default.Favorite
-                    else Icons.Default.FavoriteBorder,
-                    contentDescription = stringResource(
-                        if (favoritesOnly) R.string.favorite_filter_hide
-                        else R.string.favorite_filter_show
-                    ),
-                    tint = if (favoritesOnly) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-        },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
     )
 }
@@ -153,9 +117,7 @@ private fun ListApp(
     sequential: RatingsLoadResult?,
     parallel: RatingsLoadResult?,
     runningMode: RatingLoadMode?,
-    favoritesOnly: Boolean,
     onAppClick: (App) -> Unit,
-    onFavoriteClick: (App) -> Unit,
     onRerunRatings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -173,57 +135,11 @@ private fun ListApp(
             )
         }
 
-        if (listApp.isEmpty() && favoritesOnly) {
-            item {
-                EmptyFavoritesCard()
-            }
-        }
-
         items(items = listApp, key = { it.id }) { app ->
             AppCard(
                 app = app,
                 rating = ratings[app.id],
-                onClick = { onAppClick(app) },
-                onFavoriteClick = { onFavoriteClick(app) }
-            )
-        }
-    }
-}
-
-/**
- * Заглушка фильтра: каталог есть, но ни одно приложение ещё не отмечено.
- */
-@Composable
-private fun EmptyFavoritesCard(modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Default.FavoriteBorder,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(36.dp)
-            )
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = stringResource(R.string.favorite_empty),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.size(4.dp))
-            Text(
-                text = stringResource(R.string.favorite_empty_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                onClick = { onAppClick(app) }
             )
         }
     }
@@ -356,7 +272,6 @@ private fun AppCard(
     app: App,
     rating: Float?,
     onClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -435,19 +350,6 @@ private fun AppCard(
                 )
             }
 
-            IconButton(onClick = onFavoriteClick) {
-                Icon(
-                    imageVector = if (app.isFavorite) Icons.Default.Favorite
-                    else Icons.Default.FavoriteBorder,
-                    contentDescription = stringResource(
-                        if (app.isFavorite) R.string.favorite_remove_content_desc
-                        else R.string.favorite_add_content_desc
-                    ),
-                    tint = if (app.isFavorite) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
@@ -477,8 +379,6 @@ private fun AppListScreenPreview() {
                 parallel = RatingsLoadResult(emptyMap(), 1_610, 10)
             ),
             onAppClick = {},
-            onFavoriteClick = {},
-            onToggleFavorites = {},
             onRerunRatings = {}
         )
     }
@@ -491,8 +391,6 @@ private fun AppListLoadingPreview() {
         AppListScreen(
             uiState = AppListUiState.Loading,
             onAppClick = {},
-            onFavoriteClick = {},
-            onToggleFavorites = {},
             onRerunRatings = {}
         )
     }

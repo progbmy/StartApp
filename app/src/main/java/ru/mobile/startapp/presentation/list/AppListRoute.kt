@@ -24,8 +24,6 @@ fun AppListRoute(
     AppListScreen(
         uiState = uiState,
         onAppClick = onAppClick,
-        onFavoriteClick = viewModel::onFavoriteClick,
-        onToggleFavorites = viewModel::onToggleFavorites,
         onRerunRatings = viewModel::onRerunRatings,
         modifier = modifier
     )

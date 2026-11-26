@@ -15,7 +15,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -279,60 +278,5 @@ class AppDetailViewModelTest {
         advanceUntilIdle()
 
         assertEquals(InstallState.Installed, viewModel.content().installState)
-    }
-
-    @Test
-    fun favoriteClick_addsAppToFavorites_andUpdatesState() = runTest(dispatcher) {
-        val viewModel = viewModel()
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        assertFalse(viewModel.content().app.isFavorite)
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertTrue("состояние должно прийти из БД через подписку", viewModel.content().app.isFavorite)
-    }
-
-    @Test
-    fun favoriteClick_togglesBack() = runTest(dispatcher) {
-        val viewModel = viewModel()
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-        assertTrue(viewModel.content().app.isFavorite)
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertFalse(viewModel.content().app.isFavorite)
-    }
-
-    @Test
-    fun favoriteClick_forUnknownApp_doesNothing() = runTest(dispatcher) {
-        val viewModel = viewModel(appId = "unknown")
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertEquals(AppDetailUiState.NotFound, viewModel.uiState.value)
-    }
-
-    @Test
-    fun favoriteChange_doesNotAffectInstallState() = runTest(dispatcher) {
-        val viewModel = viewModel()
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertEquals(InstallState.NotInstalled, viewModel.content().installState)
-        assertTrue(viewModel.content().app.isFavorite)
     }
 }

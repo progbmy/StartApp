@@ -156,31 +156,6 @@ class NavigationFlowTest {
         composeRule.onNodeWithText(text(R.string.app_details_installed)).assertDoesNotExist()
     }
 
-    @Test
-    fun favorite_addsAppToFavorites_andFilterShowsIt() {
-        openCard(UiTestApps.browser)
-
-        // кнопка на карточке переключает новое поле в БД
-        composeRule.onNodeWithText(text(R.string.favorite_add)).performScrollTo().performClick()
-        awaitNode(text(R.string.favorite_remove))
-
-        // возвращаемся в список и включаем фильтр «Понравившиеся»
-        composeRule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
-        awaitNode(text(R.string.list_ratings_title))
-        composeRule
-            .onNodeWithContentDescription(text(R.string.favorite_filter_show))
-            .performClick()
-
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText(UiTestApps.mail.name)
-                .fetchSemanticsNodes().isEmpty()
-        }
-        composeRule.onNodeWithText(UiTestApps.browser.name).assertExists()
-        composeRule
-            .onNodeWithContentDescription(text(R.string.favorite_filter_hide))
-            .assertExists()
-    }
-
     /**
      * Тестовые биндинги только для этого класса: сеть заменена каталогом в памяти.
      * Модуль вложен в тест намеренно — глобальный androidTest-модуль конфликтовал бы

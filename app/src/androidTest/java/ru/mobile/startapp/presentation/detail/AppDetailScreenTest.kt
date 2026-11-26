@@ -42,7 +42,6 @@ class AppDetailScreenTest {
     private fun setScreen(
         uiState: AppDetailUiState,
         onInstallClick: () -> Unit = {},
-        onFavoriteClick: () -> Unit = {},
         onSimilarAppClick: (App) -> Unit = {},
         onBack: () -> Unit = {}
     ) {
@@ -52,7 +51,6 @@ class AppDetailScreenTest {
                     uiState = uiState,
                     snackbarHostState = remember { SnackbarHostState() },
                     onInstallClick = onInstallClick,
-                    onFavoriteClick = onFavoriteClick,
                     onSimilarAppClick = onSimilarAppClick,
                     onBack = onBack
                 )
@@ -177,28 +175,5 @@ class AppDetailScreenTest {
 
         composeRule.onNodeWithText(context.getString(R.string.app_details_similar))
             .assertDoesNotExist()
-    }
-
-    @Test
-    fun favoriteButton_addMode_reportsClick() {
-        var clicks = 0
-        setScreen(content(), onFavoriteClick = { clicks++ })
-
-        composeRule.onNodeWithText(context.getString(R.string.favorite_add)).performClick()
-
-        assertEquals("кнопка «В понравившиеся» должна вызывать колбэк", 1, clicks)
-    }
-
-    @Test
-    fun favoriteButton_showsRemoveLabel_whenAppIsFavorite() {
-        setScreen(
-            AppDetailUiState.Content(
-                app = UiTestApps.browser.copy(isFavorite = true),
-                similarApps = emptyList()
-            )
-        )
-
-        composeRule.onNodeWithText(context.getString(R.string.favorite_remove)).assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.favorite_add)).assertDoesNotExist()
     }
 }

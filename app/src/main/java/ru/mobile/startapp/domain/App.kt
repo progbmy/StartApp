@@ -16,7 +16,5 @@ data class App(
     val developer: String = "Разработчик не указан",
     val version: String = "—",
     val size: String = "—",
-    val fullDescription: String = description,
-    /** Отметка «Понравилось»; приходит из БД и меняется кнопкой на карточке. */
-    val isFavorite: Boolean = false
+    val fullDescription: String = description
 )
