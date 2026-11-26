@@ -23,8 +23,14 @@ interface AppRepository {
      */
     fun observeApp(appId: String): Flow<App?>
 
+    /** Поток приложений, отмеченных «Понравившиеся». */
+    fun observeFavorites(): Flow<List<App>>
+
     /** Добавляет приложение в вишлист или убирает его оттуда. */
     suspend fun toggleWishlist(appId: String)
+
+    /** Обновляет отметку «Понравившиеся»: true — добавить, false — убрать. */
+    suspend fun setFavorite(appId: String, isFavorite: Boolean)
 
     companion object {
         /** Сколько приложений показываем в блоке «Вам может понравиться». */

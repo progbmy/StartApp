@@ -151,6 +151,21 @@ class NavigationFlowTest {
     }
 
     @Test
+    fun favorites_togglesButton_andSurvivesCardReopen() {
+        openCard(UiTestApps.browser)
+
+        composeRule.onNodeWithText(text(R.string.favorite_add)).performScrollTo().performClick()
+        awaitNode(text(R.string.favorite_remove))
+
+        composeRule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
+        awaitNode(text(R.string.list_ratings_title))
+
+        openCard(UiTestApps.browser)
+
+        composeRule.onNodeWithText(text(R.string.favorite_remove)).assertIsDisplayed()
+    }
+
+    @Test
     fun install_runsFromStartToInstalled() {
         openCard(UiTestApps.browser)
 

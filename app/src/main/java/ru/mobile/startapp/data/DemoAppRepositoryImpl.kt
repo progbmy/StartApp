@@ -33,10 +33,21 @@ class DemoAppRepositoryImpl @Inject constructor() : AppRepository {
     override fun observeApp(appId: String): Flow<App?> =
         _apps.map { apps -> apps.firstOrNull { it.id == appId } }
 
+    override fun observeFavorites(): Flow<List<App>> =
+        _apps.map { apps -> apps.filter { it.isFavorite } }
+
     override suspend fun toggleWishlist(appId: String) {
         _apps.update { apps ->
             apps.map { app ->
                 if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
+    }
+
+    override suspend fun setFavorite(appId: String, isFavorite: Boolean) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isFavorite = isFavorite) else app
             }
         }
     }

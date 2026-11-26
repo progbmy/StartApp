@@ -44,6 +44,7 @@ class AppDetailScreenTest {
         onInstallClick: () -> Unit = {},
         onSimilarAppClick: (App) -> Unit = {},
         onWishlistClick: () -> Unit = {},
+        onFavoriteClick: () -> Unit = {},
         onBack: () -> Unit = {}
     ) {
         composeRule.setContent {
@@ -54,6 +55,7 @@ class AppDetailScreenTest {
                     onInstallClick = onInstallClick,
                     onSimilarAppClick = onSimilarAppClick,
                     onWishlistClick = onWishlistClick,
+                    onFavoriteClick = onFavoriteClick,
                     onBack = onBack
                 )
             }
@@ -62,13 +64,15 @@ class AppDetailScreenTest {
 
     private fun content(
         installState: InstallState = InstallState.NotInstalled,
-        isInWishlist: Boolean = false
+        isInWishlist: Boolean = false,
+        isFavorite: Boolean = false
     ) =
         AppDetailUiState.Content(
             app = UiTestApps.browser,
             similarApps = listOf(UiTestApps.mail, UiTestApps.gallery, UiTestApps.music),
             installState = installState,
-            isInWishlist = isInWishlist
+            isInWishlist = isInWishlist,
+            isFavorite = isFavorite
         )
 
     @Test
@@ -178,6 +182,31 @@ class AppDetailScreenTest {
             .assertIsDisplayed()
         composeRule
             .onNodeWithContentDescription(context.getString(R.string.wishlist_add))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun favoriteButton_showsAddLabelAndReportsClick() {
+        var clicks = 0
+        setScreen(content(isFavorite = false), onFavoriteClick = { clicks++ })
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.favorite_add))
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals("клик по кнопке должен уходить в ViewModel", 1, clicks)
+    }
+
+    @Test
+    fun favoriteButton_reflectsAddedState() {
+        setScreen(content(isFavorite = true))
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.favorite_remove))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.favorite_add))
             .assertDoesNotExist()
     }
 

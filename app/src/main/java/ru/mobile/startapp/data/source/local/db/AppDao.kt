@@ -24,6 +24,10 @@ abstract class AppDao {
     @Query("SELECT * FROM apps WHERE id = :id LIMIT 1")
     abstract fun getAppDetails(id: String): Flow<AppEntity?>
 
+    /** Приложения, отмеченные «Понравившиеся», в порядке каталога. */
+    @Query("SELECT * FROM apps WHERE isFavorite = 1 ORDER BY position ASC")
+    abstract fun observeFavorites(): Flow<List<AppEntity>>
+
     /**
      * Новые приложения каталога. IGNORE, а не REPLACE: существующая строка
      * сохраняет пользовательскую отметку [AppEntity.isInWishlist].
@@ -33,7 +37,7 @@ abstract class AppDao {
 
     /**
      * Обновляет только поля, которые приходят с сервера.
-     * `isInWishlist` здесь отсутствует намеренно — вишлист живёт только в БД.
+     * `isInWishlist` и `isFavorite` здесь отсутствуют намеренно — они живут только в БД.
      */
     @Query(
         "UPDATE apps SET name = :name, description = :description, category = :category, " +
@@ -55,6 +59,10 @@ abstract class AppDao {
     /** Переключает отметку «в вишлисте». */
     @Query("UPDATE apps SET isInWishlist = :isInWishlist WHERE id = :id")
     abstract suspend fun updateWishlistStatus(id: String, isInWishlist: Boolean)
+
+    /** Обновляет отметку «Понравившиеся». */
+    @Query("UPDATE apps SET isFavorite = :isFavorite WHERE id = :id")
+    abstract suspend fun updateFavorite(id: String, isFavorite: Boolean)
 
     /** Удаляет приложения, которых больше нет в каталоге сервера. */
     @Query("DELETE FROM apps WHERE id NOT IN (:ids)")

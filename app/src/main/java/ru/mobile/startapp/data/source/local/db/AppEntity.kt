@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
  *
  * [isInWishlist] — пользовательская отметка «в вишлисте»: сеть её не присылает,
  * поэтому обновление каталога не должно её затирать (см. [AppDao.upsertCatalog]).
+ * [isFavorite] — отдельная отметка «Понравившиеся», тоже живёт только в БД.
  * [position] хранит порядок приложений из ответа сервера, чтобы после перезапуска
  * список не пересортировался по id.
  */
@@ -22,5 +23,6 @@ data class AppEntity(
     val size: String,
     val fullDescription: String,
     val isInWishlist: Boolean = false,
+    val isFavorite: Boolean = false,
     val position: Int = 0
 )

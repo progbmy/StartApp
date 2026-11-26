@@ -10,6 +10,7 @@ package ru.mobile.startapp.domain
  *
  * [isInWishlist] — отметка пользователя «добавлено в вишлист». Хранится
  * в БД и приезжает в UI потоком репозитория.
+ * [isFavorite] — отдельная отметка «Понравившиеся», тоже из БД.
  */
 data class App(
     val id: String,
@@ -20,5 +21,6 @@ data class App(
     val version: String = "—",
     val size: String = "—",
     val fullDescription: String = description,
-    val isInWishlist: Boolean = false
+    val isInWishlist: Boolean = false,
+    val isFavorite: Boolean = false
 )

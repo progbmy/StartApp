@@ -51,6 +51,10 @@ class NetworkAppRepository @Inject constructor(
     override fun observeApp(appId: String): Flow<App?> =
         appDetailsDao.getAppDetails(appId).map { entity -> entity?.toDomain() }
 
+    /** «Понравившиеся»: выборка из Room, обновляется после каждого UPDATE. */
+    override fun observeFavorites(): Flow<List<App>> =
+        appDetailsDao.observeFavorites().map { entities -> entities.toDomainApps() }
+
     /**
      * Добавляет приложение в вишлист или убирает его оттуда.
      *
@@ -62,6 +66,11 @@ class NetworkAppRepository @Inject constructor(
         currentEntity?.let { entity ->
             appDetailsDao.updateWishlistStatus(appId, !entity.isInWishlist)
         }
+    }
+
+    /** Обновление нового поля «Понравившиеся» — один UPDATE в Room. */
+    override suspend fun setFavorite(appId: String, isFavorite: Boolean) {
+        appDetailsDao.updateFavorite(appId, isFavorite)
     }
 
     /**

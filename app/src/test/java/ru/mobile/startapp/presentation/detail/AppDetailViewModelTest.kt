@@ -128,6 +128,52 @@ class AppDetailViewModelTest {
     }
 
     @Test
+    fun uiState_contentCarriesFavoriteFlag() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isFavorite)
+    }
+
+    @Test
+    fun toggleFavorite_updatesStateThroughOnEachSubscription() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        assertTrue(
+            "после клика isFavorite должен приехать из БД через observeApp",
+            viewModel.content().isFavorite
+        )
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isFavorite)
+    }
+
+    @Test
+    fun wishlistAndFavorites_areIndependentInState() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+        assertTrue(viewModel.content().isInWishlist)
+        assertFalse(viewModel.content().isFavorite)
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+        assertTrue(viewModel.content().isInWishlist)
+        assertTrue(viewModel.content().isFavorite)
+    }
+
+    @Test
     fun toggleWishlist_changesOnlyCurrentApp() = runTest(dispatcher) {
         val repository = FakeAppRepository()
         val viewModel = viewModel(appId = "browser", repository = repository)

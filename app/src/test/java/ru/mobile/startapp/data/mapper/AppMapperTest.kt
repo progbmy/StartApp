@@ -113,6 +113,7 @@ class AppMapperTest {
         assertEquals("—", entity.size)
         assertEquals(4, entity.position)
         assertEquals(false, entity.isInWishlist)
+        assertEquals(false, entity.isFavorite)
     }
 
     @Test
@@ -127,6 +128,7 @@ class AppMapperTest {
             size = "52 МБ",
             fullDescription = "Полное описание галереи",
             isInWishlist = true,
+            isFavorite = true,
             position = 2
         )
 
@@ -141,6 +143,7 @@ class AppMapperTest {
         assertEquals("52 МБ", app.size)
         assertEquals("Полное описание галереи", app.fullDescription)
         assertEquals(true, app.isInWishlist)
+        assertEquals(true, app.isFavorite)
     }
 
     @Test
@@ -151,12 +154,14 @@ class AppMapperTest {
             description = "Поиск",
             category = "Интернет",
             fullDescription = "Полное описание",
-            isInWishlist = true
+            isInWishlist = true,
+            isFavorite = true
         )
 
         val entity = app.toEntity(position = 3)
 
         assertEquals(true, entity.isInWishlist)
+        assertEquals(true, entity.isFavorite)
         assertEquals(3, entity.position)
         assertEquals(app, entity.toDomain())
     }
@@ -172,7 +177,7 @@ class AppMapperTest {
             AppEntity(
                 id = "b", name = "B", description = "b", category = "cat",
                 developer = "dev", version = "1", size = "1 МБ",
-                fullDescription = "b", isInWishlist = true, position = 1
+                fullDescription = "b", isInWishlist = true, isFavorite = true, position = 1
             )
         )
 
@@ -181,5 +186,6 @@ class AppMapperTest {
         assertEquals(listOf("a", "b"), apps.map(App::id))
         assertEquals(false, apps.first().isInWishlist)
         assertEquals(true, apps.last().isInWishlist)
+        assertEquals(true, apps.last().isFavorite)
     }
 }

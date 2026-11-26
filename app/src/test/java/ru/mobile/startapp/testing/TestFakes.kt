@@ -67,10 +67,21 @@ class FakeAppRepository(initial: List<App> = TestData.catalog) : AppRepository {
     override fun observeApp(appId: String): Flow<App?> =
         _apps.map { apps -> apps.firstOrNull { it.id == appId } }
 
+    override fun observeFavorites(): Flow<List<App>> =
+        _apps.map { apps -> apps.filter { it.isFavorite } }
+
     override suspend fun toggleWishlist(appId: String) {
         _apps.update { apps ->
             apps.map { app ->
                 if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
+    }
+
+    override suspend fun setFavorite(appId: String, isFavorite: Boolean) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isFavorite = isFavorite) else app
             }
         }
     }
@@ -91,6 +102,9 @@ class FakeAppDao(initial: List<AppEntity> = emptyList()) : AppDao() {
 
     override fun getAppDetails(id: String): Flow<AppEntity?> =
         rows.map { apps -> apps.firstOrNull { it.id == id } }
+
+    override fun observeFavorites(): Flow<List<AppEntity>> =
+        rows.map { apps -> apps.filter { it.isFavorite }.sortedBy { it.position } }
 
     override suspend fun insertNew(apps: List<AppEntity>) {
         rows.update { current ->
@@ -134,6 +148,14 @@ class FakeAppDao(initial: List<AppEntity> = emptyList()) : AppDao() {
         rows.update { apps ->
             apps.map { app ->
                 if (app.id == id) app.copy(isInWishlist = isInWishlist) else app
+            }
+        }
+    }
+
+    override suspend fun updateFavorite(id: String, isFavorite: Boolean) {
+        rows.update { apps ->
+            apps.map { app ->
+                if (app.id == id) app.copy(isFavorite = isFavorite) else app
             }
         }
     }

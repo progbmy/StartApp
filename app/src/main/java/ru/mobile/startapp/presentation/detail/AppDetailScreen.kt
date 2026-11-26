@@ -20,6 +20,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
@@ -32,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -67,6 +70,7 @@ fun AppDetailScreen(
     onInstallClick: () -> Unit,
     onSimilarAppClick: (App) -> Unit,
     onWishlistClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -98,8 +102,10 @@ fun AppDetailScreen(
                 app = uiState.app,
                 similarApps = uiState.similarApps,
                 installState = uiState.installState,
+                isFavorite = uiState.isFavorite,
                 onInstallClick = onInstallClick,
                 onSimilarAppClick = onSimilarAppClick,
+                onFavoriteClick = onFavoriteClick,
                 modifier = Modifier.padding(innerPadding)
             )
         }
@@ -175,8 +181,10 @@ private fun DetailContent(
     app: App,
     similarApps: List<App>,
     installState: InstallState,
+    isFavorite: Boolean,
     onInstallClick: () -> Unit,
     onSimilarAppClick: (App) -> Unit,
+    onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -238,6 +246,13 @@ private fun DetailContent(
         InstallButton(
             installState = installState,
             onInstallClick = onInstallClick
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        FavoriteButton(
+            isFavorite = isFavorite,
+            onFavoriteClick = onFavoriteClick
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -356,6 +371,41 @@ private fun InstallButton(
                 Text(text = stringResource(R.string.app_details_installed))
             }
         }
+    }
+}
+
+/**
+ * Кнопка «Понравившиеся»: добавление приложения в список понравившихся.
+ *
+ * Подпись и иконка зависят от [isFavorite]; клик только сообщает ViewModel,
+ * что пользователь нажал, — запись в БД и обновление состояния происходят там.
+ */
+@Composable
+private fun FavoriteButton(
+    isFavorite: Boolean,
+    onFavoriteClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onFavoriteClick,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Icon(
+            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = if (isFavorite) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            }
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(
+                if (isFavorite) R.string.favorite_remove else R.string.favorite_add
+            )
+        )
     }
 }
 
@@ -486,6 +536,7 @@ private fun AppDetailContentPreview() {
             onInstallClick = {},
             onSimilarAppClick = {},
             onWishlistClick = {},
+            onFavoriteClick = {},
             onBack = {}
         )
     }
@@ -505,6 +556,27 @@ private fun AppDetailWishlistPreview() {
             onInstallClick = {},
             onSimilarAppClick = {},
             onWishlistClick = {},
+            onFavoriteClick = {},
+            onBack = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Карточка: в понравившихся")
+@Composable
+private fun AppDetailFavoritePreview() {
+    StartAppTheme {
+        AppDetailScreen(
+            uiState = AppDetailUiState.Content(
+                app = demoAppsPreview[0].copy(isFavorite = true),
+                similarApps = emptyList(),
+                isFavorite = true
+            ),
+            snackbarHostState = remember { SnackbarHostState() },
+            onInstallClick = {},
+            onSimilarAppClick = {},
+            onWishlistClick = {},
+            onFavoriteClick = {},
             onBack = {}
         )
     }
@@ -520,6 +592,7 @@ private fun AppDetailNotFoundPreview() {
             onInstallClick = {},
             onSimilarAppClick = {},
             onWishlistClick = {},
+            onFavoriteClick = {},
             onBack = {}
         )
     }

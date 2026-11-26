@@ -52,10 +52,11 @@ fun CatalogAppDto.toEntity(position: Int = 0): AppEntity = AppEntity(
     size = DEFAULT_SIZE,
     fullDescription = description,
     isInWishlist = false,
+    isFavorite = false,
     position = position
 )
 
-/** Entity → Domain: пользовательская отметка вишлиста копируется в модель. */
+/** Entity → Domain: пользовательские отметки вишлиста и «Понравившихся» копируются. */
 fun AppEntity.toDomain(): App = App(
     id = id,
     name = name,
@@ -65,7 +66,8 @@ fun AppEntity.toDomain(): App = App(
     version = version,
     size = size,
     fullDescription = fullDescription,
-    isInWishlist = isInWishlist
+    isInWishlist = isInWishlist,
+    isFavorite = isFavorite
 )
 
 /** Domain → Entity: обратное преобразование (демо-данные и тесты). */
@@ -79,6 +81,7 @@ fun App.toEntity(position: Int = 0): AppEntity = AppEntity(
     size = size,
     fullDescription = fullDescription,
     isInWishlist = isInWishlist,
+    isFavorite = isFavorite,
     position = position
 )
 

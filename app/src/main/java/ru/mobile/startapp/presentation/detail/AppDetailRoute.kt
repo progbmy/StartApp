@@ -57,6 +57,7 @@ fun AppDetailRoute(
         onInstallClick = viewModel::onInstallClick,
         onSimilarAppClick = onSimilarAppClick,
         onWishlistClick = viewModel::toggleWishlist,
+        onFavoriteClick = viewModel::toggleFavorite,
         onBack = onBack,
         modifier = modifier
     )

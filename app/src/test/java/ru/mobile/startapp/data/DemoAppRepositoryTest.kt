@@ -77,4 +77,19 @@ class DemoAppRepositoryTest {
 
         assertEquals(demoApps, repository.apps.first())
     }
+
+    @Test
+    fun setFavorite_fillsFavoritesFlowAndFlipsBack() = runTest {
+        assertTrue(repository.observeFavorites().first().isEmpty())
+
+        repository.setFavorite("gallery", true)
+
+        assertEquals(listOf("gallery"), repository.observeFavorites().first().map { it.id })
+        assertTrue(repository.observeApp("gallery").first()!!.isFavorite)
+        assertFalse(repository.observeApp("music").first()!!.isFavorite)
+
+        repository.setFavorite("gallery", false)
+
+        assertTrue(repository.observeFavorites().first().isEmpty())
+    }
 }

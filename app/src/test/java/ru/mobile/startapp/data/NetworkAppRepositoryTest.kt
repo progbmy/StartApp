@@ -38,7 +38,8 @@ class NetworkAppRepositoryTest {
     private fun entity(
         id: String,
         position: Int = 0,
-        isInWishlist: Boolean = false
+        isInWishlist: Boolean = false,
+        isFavorite: Boolean = false
     ): AppEntity = AppEntity(
         id = id,
         name = "Приложение $id",
@@ -49,6 +50,7 @@ class NetworkAppRepositoryTest {
         size = "10 МБ",
         fullDescription = "Полное описание $id",
         isInWishlist = isInWishlist,
+        isFavorite = isFavorite,
         position = position
     )
 
@@ -209,6 +211,78 @@ class NetworkAppRepositoryTest {
         val gallery = repository.observeApp("gallery").first()!!
         assertTrue("обновление каталога не должно затирать вишлист", gallery.isInWishlist)
         assertFalse(repository.observeApp("mail").first()!!.isInWishlist)
+    }
+
+    @Test
+    fun setFavorite_updatesFlagAndFavoritesFlow() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+        assertTrue(repository.observeFavorites().first().isEmpty())
+
+        repository.setFavorite("mail", true)
+
+        assertEquals(listOf("mail"), repository.observeFavorites().first().map { it.id })
+        assertTrue(repository.observeApp("mail").first()!!.isFavorite)
+        assertFalse(repository.observeApp("browser").first()!!.isFavorite)
+
+        repository.setFavorite("mail", false)
+
+        assertTrue(repository.observeFavorites().first().isEmpty())
+        assertFalse(repository.observeApp("mail").first()!!.isFavorite)
+    }
+
+    @Test
+    fun favorites_areIndependentFromWishlist() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+
+        repository.toggleWishlist("browser")
+        repository.setFavorite("mail", true)
+
+        val browser = repository.observeApp("browser").first()!!
+        val mail = repository.observeApp("mail").first()!!
+        assertTrue("вишлист браузера", browser.isInWishlist)
+        assertFalse("браузер не в понравившихся", browser.isFavorite)
+        assertTrue("почта в понравившихся", mail.isFavorite)
+        assertFalse("почта не в вишлисте", mail.isInWishlist)
+        assertEquals(listOf("mail"), repository.observeFavorites().first().map { it.id })
+    }
+
+    @Test
+    fun favoriteMark_survivesCatalogReload() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+        repository.setFavorite("gallery", true)
+
+        repository.loadCatalog()
+
+        assertTrue(
+            "обновление каталога не должно затирать «Понравившиеся»",
+            repository.observeApp("gallery").first()!!.isFavorite
+        )
+    }
+
+    @Test
+    fun setFavorite_unknownId_doesNothing() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+
+        repository.setFavorite("unknown", true)
+
+        assertNull(repository.observeApp("unknown").first())
+        assertTrue(repository.observeFavorites().first().isEmpty())
     }
 
     @Test
