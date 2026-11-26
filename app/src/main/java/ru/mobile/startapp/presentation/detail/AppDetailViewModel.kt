@@ -19,6 +19,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
+import ru.mobile.startapp.domain.similarApps
 import javax.inject.Inject
 
 /** Состояние установки приложения: кнопка на карточке работает по нему. */
@@ -42,7 +43,9 @@ sealed interface AppDetailUiState {
     data class Content(
         val app: App,
         val similarApps: List<App>,
-        val installState: InstallState = InstallState.NotInstalled
+        val installState: InstallState = InstallState.NotInstalled,
+        /** Добавлено ли приложение в вишлист — иконка в тулбаре смотрит сюда. */
+        val isInWishlist: Boolean = false
     ) : AppDetailUiState
 
     data object NotFound : AppDetailUiState
@@ -57,6 +60,11 @@ enum class AppDetailEvent { InstallStarted, InstallFinished, InstallCancelled }
  * [AppRepository] подставляется через Hilt DI.
  * id приложения приходит из аргументов маршрута через [SavedStateHandle],
  * поэтому экран восстанавливается после смерти процесса и поворота.
+ *
+ * Данные не запрашиваются разово: ViewModel подписан на [AppRepository.observeApp]
+ * (карточка) и [AppRepository.apps] (похожие приложения). После [toggleWishlist]
+ * Room присылает обновлённую строку, подписка пересобирает [uiState],
+ * и иконка в тулбаре меняется без ручного обновления состояния.
  */
 @HiltViewModel
 class AppDetailViewModel @Inject constructor(
@@ -79,24 +87,40 @@ class AppDetailViewModel @Inject constructor(
     private var installJob: Job? = null
 
     val uiState: StateFlow<AppDetailUiState> = combine(
+        repository.observeApp(appId),
         repository.apps,
         _installState
-    ) { apps, installState ->
-        val app = apps.firstOrNull { it.id == appId }
-        if (app == null) {
-            AppDetailUiState.NotFound
-        } else {
-            AppDetailUiState.Content(
+    ) { app, apps, installState ->
+        when {
+            app != null -> AppDetailUiState.Content(
                 app = app,
-                similarApps = repository.similarApps(app.id),
-                installState = installState
+                similarApps = apps.similarApps(app.id),
+                installState = installState,
+                isInWishlist = app.isInWishlist
             )
+
+            // каталог ещё не пришёл в Room — показываем загрузку, а не «не найдено»
+            apps.isEmpty() -> AppDetailUiState.Loading
+
+            else -> AppDetailUiState.NotFound
         }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = AppDetailUiState.Loading
     )
+
+    /**
+     * Клик по иконке вишлиста в тулбаре.
+     *
+     * Состояние здесь не меняем: репозиторий переключает флаг в БД,
+     * Room инвалидирует запрос, обновление приходит через [uiState].
+     */
+    fun toggleWishlist() {
+        viewModelScope.launch {
+            repository.toggleWishlist(appId)
+        }
+    }
 
     /**
      * Нажатие кнопки установки.

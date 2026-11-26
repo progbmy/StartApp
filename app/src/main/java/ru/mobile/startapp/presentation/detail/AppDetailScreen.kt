@@ -20,6 +20,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -64,14 +66,23 @@ fun AppDetailScreen(
     snackbarHostState: SnackbarHostState,
     onInstallClick: () -> Unit,
     onSimilarAppClick: (App) -> Unit,
+    onWishlistClick: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val title = (uiState as? AppDetailUiState.Content)?.app?.name.orEmpty()
+    val content = uiState as? AppDetailUiState.Content
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { DetailToolBar(title = title, onBack = onBack) },
+        topBar = {
+            DetailToolBar(
+                title = content?.app?.name.orEmpty(),
+                isInWishlist = content?.isInWishlist == true,
+                showWishlist = content != null,
+                onWishlistClick = onWishlistClick,
+                onBack = onBack
+            )
+        },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
         when (uiState) {
@@ -96,11 +107,22 @@ fun AppDetailScreen(
 }
 
 /**
- * Тулбар карточки: кнопка «назад» и название приложения.
+ * Тулбар карточки: кнопка «назад», название приложения и иконка вишлиста.
+ *
+ * Иконка закрашенная, когда приложение уже в вишлисте, и контурная — когда нет.
+ * Состояние приходит из ViewModel, поэтому после клика оно меняется само,
+ * как только Room пришлёт обновлённую строку.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DetailToolBar(title: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
+private fun DetailToolBar(
+    title: String,
+    isInWishlist: Boolean,
+    showWishlist: Boolean,
+    onWishlistClick: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     TopAppBar(
         modifier = modifier,
         title = {
@@ -119,10 +141,27 @@ private fun DetailToolBar(title: String, onBack: () -> Unit, modifier: Modifier 
                 )
             }
         },
+        actions = {
+            if (showWishlist) {
+                IconButton(onClick = onWishlistClick) {
+                    Icon(
+                        imageVector = if (isInWishlist) {
+                            Icons.Default.Star
+                        } else {
+                            Icons.Default.StarBorder
+                        },
+                        contentDescription = stringResource(
+                            if (isInWishlist) R.string.wishlist_remove else R.string.wishlist_add
+                        )
+                    )
+                }
+            }
+        },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
     )
 }
@@ -446,6 +485,26 @@ private fun AppDetailContentPreview() {
             snackbarHostState = remember { SnackbarHostState() },
             onInstallClick = {},
             onSimilarAppClick = {},
+            onWishlistClick = {},
+            onBack = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Карточка: в вишлисте")
+@Composable
+private fun AppDetailWishlistPreview() {
+    StartAppTheme {
+        AppDetailScreen(
+            uiState = AppDetailUiState.Content(
+                app = demoAppsPreview[0].copy(isInWishlist = true),
+                similarApps = emptyList(),
+                isInWishlist = true
+            ),
+            snackbarHostState = remember { SnackbarHostState() },
+            onInstallClick = {},
+            onSimilarAppClick = {},
+            onWishlistClick = {},
             onBack = {}
         )
     }
@@ -460,6 +519,7 @@ private fun AppDetailNotFoundPreview() {
             snackbarHostState = remember { SnackbarHostState() },
             onInstallClick = {},
             onSimilarAppClick = {},
+            onWishlistClick = {},
             onBack = {}
         )
     }

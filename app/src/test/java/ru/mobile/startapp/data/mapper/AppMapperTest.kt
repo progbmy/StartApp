@@ -3,10 +3,11 @@ package ru.mobile.startapp.data.mapper
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import ru.mobile.startapp.data.source.local.AppDto
+import ru.mobile.startapp.data.source.local.db.AppEntity
 import ru.mobile.startapp.data.source.network.CatalogAppDto
 import ru.mobile.startapp.domain.App
 
-/** Маппинг DTO → доменная модель: все поля и значения по умолчанию. */
+/** Маппинг DTO ↔ Entity ↔ доменная модель: все поля, значения по умолчанию и вишлист. */
 class AppMapperTest {
 
     @Test
@@ -92,5 +93,93 @@ class AppMapperTest {
     @Test
     fun emptyList_mapsToEmptyDomainList() {
         assertEquals(emptyList<App>(), emptyList<AppDto>().toDomainList())
+    }
+
+    @Test
+    fun networkDto_toEntity_fillsServiceDefaultsAndPosition() {
+        val entity = CatalogAppDto(
+            id = "mail",
+            name = "Почта",
+            description = "Просмотр писем",
+            category = "Связь",
+            iconUrl = "http://185.103.109.134/icons/mail.png"
+        ).toEntity(position = 4)
+
+        assertEquals("mail", entity.id)
+        assertEquals("Почта", entity.name)
+        assertEquals("Просмотр писем", entity.fullDescription)
+        assertEquals("Разработчик не указан", entity.developer)
+        assertEquals("—", entity.version)
+        assertEquals("—", entity.size)
+        assertEquals(4, entity.position)
+        assertEquals(false, entity.isInWishlist)
+    }
+
+    @Test
+    fun entityToDomain_copiesWishlistFlagAndAllFields() {
+        val entity = AppEntity(
+            id = "gallery",
+            name = "Галерея",
+            description = "Фото и видео",
+            category = "Медиа",
+            developer = "StartApp Studio",
+            version = "3.0.2",
+            size = "52 МБ",
+            fullDescription = "Полное описание галереи",
+            isInWishlist = true,
+            position = 2
+        )
+
+        val app = entity.toDomain()
+
+        assertEquals("gallery", app.id)
+        assertEquals("Галерея", app.name)
+        assertEquals("Фото и видео", app.description)
+        assertEquals("Медиа", app.category)
+        assertEquals("StartApp Studio", app.developer)
+        assertEquals("3.0.2", app.version)
+        assertEquals("52 МБ", app.size)
+        assertEquals("Полное описание галереи", app.fullDescription)
+        assertEquals(true, app.isInWishlist)
+    }
+
+    @Test
+    fun domainToEntity_roundTripsWishlistFlag() {
+        val app = App(
+            id = "browser",
+            name = "Браузер",
+            description = "Поиск",
+            category = "Интернет",
+            fullDescription = "Полное описание",
+            isInWishlist = true
+        )
+
+        val entity = app.toEntity(position = 3)
+
+        assertEquals(true, entity.isInWishlist)
+        assertEquals(3, entity.position)
+        assertEquals(app, entity.toDomain())
+    }
+
+    @Test
+    fun entityList_mapsToDomainAppsKeepingWishlistAndOrder() {
+        val entities = listOf(
+            AppEntity(
+                id = "a", name = "A", description = "a", category = "cat",
+                developer = "dev", version = "1", size = "1 МБ",
+                fullDescription = "a", position = 0
+            ),
+            AppEntity(
+                id = "b", name = "B", description = "b", category = "cat",
+                developer = "dev", version = "1", size = "1 МБ",
+                fullDescription = "b", isInWishlist = true, position = 1
+            )
+        )
+
+        val apps = entities.toDomainApps()
+
+        assertEquals(listOf("a", "b"), apps.map(App::id))
+        assertEquals(false, apps.first().isInWishlist)
+        assertEquals(true, apps.last().isInWishlist)
     }
 }

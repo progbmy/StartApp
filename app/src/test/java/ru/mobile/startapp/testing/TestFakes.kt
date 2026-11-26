@@ -1,9 +1,13 @@
 package ru.mobile.startapp.testing
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import ru.mobile.startapp.data.source.local.db.AppDao
+import ru.mobile.startapp.data.source.local.db.AppEntity
 import ru.mobile.startapp.data.source.network.RatingApi
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
@@ -54,23 +58,89 @@ object TestData {
 class FakeAppRepository(initial: List<App> = TestData.catalog) : AppRepository {
 
     private val _apps = MutableStateFlow(initial)
-    override val apps: StateFlow<List<App>> = _apps.asStateFlow()
+    override val apps: Flow<List<App>> = _apps.asStateFlow()
 
     fun emit(apps: List<App>) {
         _apps.value = apps
     }
 
-    override fun appById(appId: String?): App? =
-        appId?.let { id -> _apps.value.firstOrNull { it.id == id } }
+    override fun observeApp(appId: String): Flow<App?> =
+        _apps.map { apps -> apps.firstOrNull { it.id == appId } }
 
-    override fun similarApps(appId: String, limit: Int): List<App> {
-        val current = appById(appId) ?: return emptyList()
+    override suspend fun toggleWishlist(appId: String) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
+    }
+}
 
-        val (sameCategory, others) = _apps.value
-            .filter { it.id != current.id }
-            .partition { it.category == current.category }
+/**
+ * Room-DAO в памяти: те же операции, что у настоящего [AppDao], но без Android.
+ *
+ * Наследует [AppDao], поэтому [AppDao.upsertCatalog] проверяется на той же
+ * логике «вставка новых + обновление контента», что работает в приложении.
+ */
+class FakeAppDao(initial: List<AppEntity> = emptyList()) : AppDao() {
 
-        return (sameCategory + others).take(limit)
+    private val rows = MutableStateFlow(initial)
+
+    override fun observeApps(): Flow<List<AppEntity>> =
+        rows.map { apps -> apps.sortedBy { it.position } }
+
+    override fun getAppDetails(id: String): Flow<AppEntity?> =
+        rows.map { apps -> apps.firstOrNull { it.id == id } }
+
+    override suspend fun insertNew(apps: List<AppEntity>) {
+        rows.update { current ->
+            val existingIds = current.map { it.id }.toSet()
+            current + apps.filter { it.id !in existingIds }
+        }
+    }
+
+    override suspend fun updateContent(
+        id: String,
+        name: String,
+        description: String,
+        category: String,
+        developer: String,
+        version: String,
+        size: String,
+        fullDescription: String,
+        position: Int
+    ) {
+        rows.update { apps ->
+            apps.map { app ->
+                if (app.id == id) {
+                    app.copy(
+                        name = name,
+                        description = description,
+                        category = category,
+                        developer = developer,
+                        version = version,
+                        size = size,
+                        fullDescription = fullDescription,
+                        position = position
+                    )
+                } else {
+                    app
+                }
+            }
+        }
+    }
+
+    override suspend fun updateWishlistStatus(id: String, isInWishlist: Boolean) {
+        rows.update { apps ->
+            apps.map { app ->
+                if (app.id == id) app.copy(isInWishlist = isInWishlist) else app
+            }
+        }
+    }
+
+    override suspend fun deleteMissing(ids: List<String>) {
+        // SQLite: `NOT IN ()` истинно для всех строк, поэтому пустой список удаляет всё
+        rows.update { apps -> if (ids.isEmpty()) emptyList() else apps.filter { it.id in ids } }
     }
 }
 

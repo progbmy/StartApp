@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -127,6 +128,26 @@ class NavigationFlowTest {
 
         composeRule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
         awaitNode(UiTestApps.browser.version)
+    }
+
+    @Test
+    fun wishlist_togglesIcon_andSurvivesCardReopen() {
+        openCard(UiTestApps.browser)
+
+        composeRule.onNodeWithContentDescription(text(R.string.wishlist_add)).performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithContentDescription(text(R.string.wishlist_remove))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
+        awaitNode(text(R.string.list_ratings_title))
+
+        openCard(UiTestApps.browser)
+
+        composeRule
+            .onNodeWithContentDescription(text(R.string.wishlist_remove))
+            .assertIsDisplayed()
     }
 
     @Test

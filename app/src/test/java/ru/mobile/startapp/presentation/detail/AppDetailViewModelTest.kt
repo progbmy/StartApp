@@ -3,6 +3,7 @@ package ru.mobile.startapp.presentation.detail
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -97,6 +99,46 @@ class AppDetailViewModelTest {
         advanceUntilIdle()
 
         assertEquals(AppDetailUiState.NotFound, viewModel.uiState.value)
+    }
+
+    @Test
+    fun uiState_contentCarriesWishlistFlag() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isInWishlist)
+    }
+
+    @Test
+    fun toggleWishlist_updatesStateThroughSubscription() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+
+        assertTrue("после клика флаг должен приехать из репозитория", viewModel.content().isInWishlist)
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isInWishlist)
+    }
+
+    @Test
+    fun toggleWishlist_changesOnlyCurrentApp() = runTest(dispatcher) {
+        val repository = FakeAppRepository()
+        val viewModel = viewModel(appId = "browser", repository = repository)
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+
+        val mail = repository.apps.first().first { it.id == "mail" }
+        assertFalse("чужие приложения не должны попадать в вишлист", mail.isInWishlist)
     }
 
     @Test

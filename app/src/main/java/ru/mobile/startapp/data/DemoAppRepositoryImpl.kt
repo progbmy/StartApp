@@ -1,9 +1,11 @@
 package ru.mobile.startapp.data
 
 import javax.inject.Inject
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import ru.mobile.startapp.data.mapper.toDomainList
 import ru.mobile.startapp.data.source.local.DemoAppDataSource
 import ru.mobile.startapp.domain.App
@@ -16,29 +18,26 @@ import ru.mobile.startapp.domain.repository.AppRepository
  * 1. Читает жёстко заданные DTO из [DemoAppDataSource].
  * 2. Конвертирует их через [ru.mobile.startapp.data.mapper.AppMapper]
  *    в доменные модели.
- * 3. Отдаёт доменные модели через [StateFlow] представлению.
+ * 3. Отдаёт доменные модели через [MutableStateFlow] представлению.
  *
- * Заменить на сетевой или локальный источник — достаточно создать
- * новую реализацию [AppRepository], доменная модель и представление
- * останутся без изменений.
+ * Используется в юнит-тестах и как пример альтернативного источника.
+ * Вишлист здесь тоже живёт в состоянии репозитория и переживает пересоздание
+ * ViewModel, но не перезапуск процесса — этим отличается от Room-реализации.
  */
 class DemoAppRepositoryImpl @Inject constructor() : AppRepository {
 
     private val _apps = MutableStateFlow(DemoAppDataSource.apps.toDomainList())
-    override val apps: StateFlow<List<App>> = _apps.asStateFlow()
 
-    override fun appById(appId: String?): App? {
-        if (appId == null) return null
-        return _apps.value.find { it.id == appId }
-    }
+    override val apps: Flow<List<App>> = _apps.asStateFlow()
 
-    override fun similarApps(appId: String, limit: Int): List<App> {
-        val current = appById(appId) ?: return emptyList()
+    override fun observeApp(appId: String): Flow<App?> =
+        _apps.map { apps -> apps.firstOrNull { it.id == appId } }
 
-        val (sameCategory, others) = _apps.value
-            .filter { it.id != current.id }
-            .partition { it.category == current.category }
-
-        return (sameCategory + others).take(limit)
+    override suspend fun toggleWishlist(appId: String) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
     }
 }

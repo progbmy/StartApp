@@ -43,6 +43,7 @@ class AppDetailScreenTest {
         uiState: AppDetailUiState,
         onInstallClick: () -> Unit = {},
         onSimilarAppClick: (App) -> Unit = {},
+        onWishlistClick: () -> Unit = {},
         onBack: () -> Unit = {}
     ) {
         composeRule.setContent {
@@ -52,17 +53,22 @@ class AppDetailScreenTest {
                     snackbarHostState = remember { SnackbarHostState() },
                     onInstallClick = onInstallClick,
                     onSimilarAppClick = onSimilarAppClick,
+                    onWishlistClick = onWishlistClick,
                     onBack = onBack
                 )
             }
         }
     }
 
-    private fun content(installState: InstallState = InstallState.NotInstalled) =
+    private fun content(
+        installState: InstallState = InstallState.NotInstalled,
+        isInWishlist: Boolean = false
+    ) =
         AppDetailUiState.Content(
             app = UiTestApps.browser,
             similarApps = listOf(UiTestApps.mail, UiTestApps.gallery, UiTestApps.music),
-            installState = installState
+            installState = installState,
+            isInWishlist = isInWishlist
         )
 
     @Test
@@ -148,6 +154,40 @@ class AppDetailScreenTest {
         composeRule.onNodeWithContentDescription(context.getString(R.string.action_back)).performClick()
 
         assertEquals(1, backs)
+    }
+
+    @Test
+    fun wishlistIcon_showsAddStateAndReportsClick() {
+        var clicks = 0
+        setScreen(content(isInWishlist = false), onWishlistClick = { clicks++ })
+
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_add))
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals("клик по иконке должен уходить в ViewModel", 1, clicks)
+    }
+
+    @Test
+    fun wishlistIcon_reflectsAddedState() {
+        setScreen(content(isInWishlist = true))
+
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_remove))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_add))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun wishlistIcon_isHiddenWhenAppIsNotFound() {
+        setScreen(AppDetailUiState.NotFound)
+
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_add))
+            .assertDoesNotExist()
     }
 
     @Test

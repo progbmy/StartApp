@@ -1,15 +1,20 @@
 package ru.mobile.startapp.testing
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import ru.mobile.startapp.domain.App
 import ru.mobile.startapp.domain.repository.AppRepository
 import ru.mobile.startapp.domain.repository.RatingRepository
 
 /**
  * Каталог в памяти для сквозных UI-тестов: тот же контракт [AppRepository],
- * но без сети — данные доступны с первого кадра.
+ * но без сети и Room — данные доступны с первого кадра.
+ *
+ * Вишлист меняется в этом же состоянии репозитория, поэтому отметка переживает
+ * возврат из карточки и повторное открытие в рамках теста.
  *
  * Hilt-модуль с этой подменой объявлен внутри `NavigationFlowTest.TestBindings`:
  * так он действует только на нужный тест-класс и не конфликтует с продовым
@@ -18,19 +23,17 @@ import ru.mobile.startapp.domain.repository.RatingRepository
 class UiTestAppRepository(initial: List<App> = UiTestApps.catalog) : AppRepository {
 
     private val _apps = MutableStateFlow(initial)
-    override val apps: StateFlow<List<App>> = _apps.asStateFlow()
+    override val apps: Flow<List<App>> = _apps.asStateFlow()
 
-    override fun appById(appId: String?): App? =
-        appId?.let { id -> _apps.value.firstOrNull { it.id == id } }
+    override fun observeApp(appId: String): Flow<App?> =
+        _apps.map { apps -> apps.firstOrNull { it.id == appId } }
 
-    override fun similarApps(appId: String, limit: Int): List<App> {
-        val current = appById(appId) ?: return emptyList()
-
-        val (sameCategory, others) = _apps.value
-            .filter { it.id != current.id }
-            .partition { it.category == current.category }
-
-        return (sameCategory + others).take(limit)
+    override suspend fun toggleWishlist(appId: String) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
     }
 }
 
