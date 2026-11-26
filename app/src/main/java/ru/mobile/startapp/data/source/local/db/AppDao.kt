@@ -10,49 +10,39 @@ import kotlinx.coroutines.flow.Flow
 /**
  * DAO каталога приложений.
  *
- * Подписки:
- * - [observeApps] — весь каталог;
- * - [observeFavorites] — только «Понравившиеся»;
- * - [observeApp] — одно приложение по id (карточка).
- *
- * Обновление нового поля — [updateFavorite]. Вызывается из репозитория
- * по нажатию кнопки в интерфейсе; Room после UPDATE сам эмитит новые
- * значения во все активные Flow.
+ * Каталог читается потоками: Room сам присылает новое значение после любого
+ * изменения таблицы, поэтому UI обновляется без ручного перезапроса.
  */
 @Dao
 abstract class AppDao {
 
-    @Query("SELECT * FROM ${AppEntity.TABLE} ORDER BY position ASC")
+    /** Весь каталог в порядке сервера. */
+    @Query("SELECT * FROM apps ORDER BY position ASC")
     abstract fun observeApps(): Flow<List<AppEntity>>
 
-    @Query("SELECT * FROM ${AppEntity.TABLE} WHERE isFavorite = 1 ORDER BY position ASC")
+    /** Одна карточка по id; null — приложения ещё нет в БД. */
+    @Query("SELECT * FROM apps WHERE id = :id LIMIT 1")
+    abstract fun getAppDetails(id: String): Flow<AppEntity?>
+
+    /** Приложения, отмеченные «Понравившиеся», в порядке каталога. */
+    @Query("SELECT * FROM apps WHERE isFavorite = 1 ORDER BY position ASC")
     abstract fun observeFavorites(): Flow<List<AppEntity>>
 
-    @Query("SELECT * FROM ${AppEntity.TABLE} WHERE id = :appId LIMIT 1")
-    abstract fun observeApp(appId: String): Flow<AppEntity?>
-
+    /**
+     * Новые приложения каталога. IGNORE, а не REPLACE: существующая строка
+     * сохраняет пользовательскую отметку [AppEntity.isInWishlist].
+     */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertNew(apps: List<AppEntity>)
 
     /**
-     * Обновляет контентные поля уже существующей строки.
-     *
-     * `isFavorite` намеренно не входит в SET: перезагрузка каталога из сети
-     * не должна сбрасывать отметки «Понравилось».
+     * Обновляет только поля, которые приходят с сервера.
+     * `isInWishlist` и `isFavorite` здесь отсутствуют намеренно — они живут только в БД.
      */
     @Query(
-        """
-        UPDATE ${AppEntity.TABLE} SET
-            name = :name,
-            description = :description,
-            category = :category,
-            developer = :developer,
-            version = :version,
-            size = :size,
-            fullDescription = :fullDescription,
-            position = :position
-        WHERE id = :id
-        """
+        "UPDATE apps SET name = :name, description = :description, category = :category, " +
+            "developer = :developer, version = :version, size = :size, " +
+            "fullDescription = :fullDescription, position = :position WHERE id = :id"
     )
     abstract suspend fun updateContent(
         id: String,
@@ -66,17 +56,21 @@ abstract class AppDao {
         position: Int
     )
 
-    /** Метод обновления нового поля — отметка «Понравилось». */
-    @Query("UPDATE ${AppEntity.TABLE} SET isFavorite = :isFavorite WHERE id = :appId")
-    abstract suspend fun updateFavorite(appId: String, isFavorite: Boolean)
+    /** Переключает отметку «в вишлисте». */
+    @Query("UPDATE apps SET isInWishlist = :isInWishlist WHERE id = :id")
+    abstract suspend fun updateWishlistStatus(id: String, isInWishlist: Boolean)
+
+    /** Обновляет отметку «Понравившиеся». */
+    @Query("UPDATE apps SET isFavorite = :isFavorite WHERE id = :id")
+    abstract suspend fun updateFavorite(id: String, isFavorite: Boolean)
 
     /** Удаляет приложения, которых больше нет в каталоге сервера. */
-    @Query("DELETE FROM ${AppEntity.TABLE} WHERE id NOT IN (:ids)")
+    @Query("DELETE FROM apps WHERE id NOT IN (:ids)")
     abstract suspend fun deleteMissing(ids: List<String>)
 
     /**
-     * Сохраняет каталог из сети: новые строки добавляет, существующим
-     * обновляет контент, `isFavorite` не трогает.
+     * Записывает каталог одной транзакцией: вставка новых строк + обновление
+     * контента существующих. Подписчики не увидят наполовину обновлённую таблицу.
      */
     @Transaction
     open suspend fun upsertCatalog(apps: List<AppEntity>) {

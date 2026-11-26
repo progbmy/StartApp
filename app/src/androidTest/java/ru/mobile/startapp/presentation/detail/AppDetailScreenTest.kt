@@ -42,8 +42,9 @@ class AppDetailScreenTest {
     private fun setScreen(
         uiState: AppDetailUiState,
         onInstallClick: () -> Unit = {},
-        onFavoriteClick: () -> Unit = {},
         onSimilarAppClick: (App) -> Unit = {},
+        onWishlistClick: () -> Unit = {},
+        onFavoriteClick: () -> Unit = {},
         onBack: () -> Unit = {}
     ) {
         composeRule.setContent {
@@ -52,19 +53,26 @@ class AppDetailScreenTest {
                     uiState = uiState,
                     snackbarHostState = remember { SnackbarHostState() },
                     onInstallClick = onInstallClick,
-                    onFavoriteClick = onFavoriteClick,
                     onSimilarAppClick = onSimilarAppClick,
+                    onWishlistClick = onWishlistClick,
+                    onFavoriteClick = onFavoriteClick,
                     onBack = onBack
                 )
             }
         }
     }
 
-    private fun content(installState: InstallState = InstallState.NotInstalled) =
+    private fun content(
+        installState: InstallState = InstallState.NotInstalled,
+        isInWishlist: Boolean = false,
+        isFavorite: Boolean = false
+    ) =
         AppDetailUiState.Content(
             app = UiTestApps.browser,
             similarApps = listOf(UiTestApps.mail, UiTestApps.gallery, UiTestApps.music),
-            installState = installState
+            installState = installState,
+            isInWishlist = isInWishlist,
+            isFavorite = isFavorite
         )
 
     @Test
@@ -153,6 +161,65 @@ class AppDetailScreenTest {
     }
 
     @Test
+    fun wishlistIcon_showsAddStateAndReportsClick() {
+        var clicks = 0
+        setScreen(content(isInWishlist = false), onWishlistClick = { clicks++ })
+
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_add))
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals("клик по иконке должен уходить в ViewModel", 1, clicks)
+    }
+
+    @Test
+    fun wishlistIcon_reflectsAddedState() {
+        setScreen(content(isInWishlist = true))
+
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_remove))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_add))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun favoriteButton_showsAddLabelAndReportsClick() {
+        var clicks = 0
+        setScreen(content(isFavorite = false), onFavoriteClick = { clicks++ })
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.favorite_add))
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals("клик по кнопке должен уходить в ViewModel", 1, clicks)
+    }
+
+    @Test
+    fun favoriteButton_reflectsAddedState() {
+        setScreen(content(isFavorite = true))
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.favorite_remove))
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithText(context.getString(R.string.favorite_add))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun wishlistIcon_isHiddenWhenAppIsNotFound() {
+        setScreen(AppDetailUiState.NotFound)
+
+        composeRule
+            .onNodeWithContentDescription(context.getString(R.string.wishlist_add))
+            .assertDoesNotExist()
+    }
+
+    @Test
     fun similarApps_showHeadingAndReportClicks() {
         var clicked: App? = null
         setScreen(content(), onSimilarAppClick = { clicked = it })
@@ -177,28 +244,5 @@ class AppDetailScreenTest {
 
         composeRule.onNodeWithText(context.getString(R.string.app_details_similar))
             .assertDoesNotExist()
-    }
-
-    @Test
-    fun favoriteButton_addMode_reportsClick() {
-        var clicks = 0
-        setScreen(content(), onFavoriteClick = { clicks++ })
-
-        composeRule.onNodeWithText(context.getString(R.string.favorite_add)).performClick()
-
-        assertEquals("кнопка «В понравившиеся» должна вызывать колбэк", 1, clicks)
-    }
-
-    @Test
-    fun favoriteButton_showsRemoveLabel_whenAppIsFavorite() {
-        setScreen(
-            AppDetailUiState.Content(
-                app = UiTestApps.browser.copy(isFavorite = true),
-                similarApps = emptyList()
-            )
-        )
-
-        composeRule.onNodeWithText(context.getString(R.string.favorite_remove)).assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.favorite_add)).assertDoesNotExist()
     }
 }

@@ -11,17 +11,19 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
+import ru.mobile.startapp.data.source.local.db.AppEntity
 import ru.mobile.startapp.data.source.network.CatalogApiService
 import ru.mobile.startapp.data.source.network.CatalogAppDto
+import ru.mobile.startapp.domain.repository.AppRepository
+import ru.mobile.startapp.domain.similarApps
 import ru.mobile.startapp.testing.FakeAppDao
 
 /**
- * Репозиторий «сеть + БД»: успешный ответ и сохранение в DAO, HTTP-ошибка,
- * падение сети, отмена и сохранность отметки «Понравилось» при перезагрузке.
+ * Сетевой репозиторий каталога: запись в Room, сохранность вишлиста,
+ * HTTP-ошибка, падение сети и отмена.
  *
  * [NetworkAppRepository.loadCatalog] вызывается напрямую — иначе загрузку из
  * `init` нельзя дождаться детерминированно (она идёт на `Dispatchers.IO`).
- * Вместо Room подставляется [FakeAppDao] в памяти.
  */
 class NetworkAppRepositoryTest {
 
@@ -33,25 +35,45 @@ class NetworkAppRepositoryTest {
         CatalogAppDto("navigator", "Навигатор", "Маршруты и пробки", "Путешествия")
     )
 
+    private fun entity(
+        id: String,
+        position: Int = 0,
+        isInWishlist: Boolean = false,
+        isFavorite: Boolean = false
+    ): AppEntity = AppEntity(
+        id = id,
+        name = "Приложение $id",
+        description = "Описание $id",
+        category = "Интернет",
+        developer = "StartApp Studio",
+        version = "1.0",
+        size = "10 МБ",
+        fullDescription = "Полное описание $id",
+        isInWishlist = isInWishlist,
+        isFavorite = isFavorite,
+        position = position
+    )
+
     @Test
-    fun loadCatalog_success_savesAndMapsApps() = runTest {
+    fun loadCatalog_success_writesCatalogToRoom() = runTest {
+        val dao = FakeAppDao()
         val repository = NetworkAppRepository(
             FakeCatalogApi { Response.success(catalog) },
-            FakeAppDao()
+            dao
         )
 
         repository.loadCatalog()
 
         val apps = repository.apps.first()
         assertEquals(catalog.map { it.id }, apps.map { it.id })
-        assertEquals("Браузер", repository.observeApp("browser").first()?.name)
+        assertEquals("Браузер", apps.first().name)
         assertEquals("Разработчик не указан", apps.first().developer)
-        assertFalse(apps.first().isFavorite)
+        assertTrue(apps.none { it.isInWishlist })
     }
 
     @Test
-    fun loadCatalog_respectsServerOrder() = runTest {
-        val shuffled = listOf(catalog[2], catalog[0], catalog[4], catalog[1], catalog[3])
+    fun loadCatalog_keepsServerOrder() = runTest {
+        val shuffled = listOf(catalog[3], catalog[0], catalog[4], catalog[1], catalog[2])
         val repository = NetworkAppRepository(
             FakeCatalogApi { Response.success(shuffled) },
             FakeAppDao()
@@ -63,26 +85,62 @@ class NetworkAppRepositoryTest {
     }
 
     @Test
-    fun loadCatalog_httpError_keepsDatabaseEmpty() = runTest {
+    fun loadCatalog_removesAppsMissingFromServer() = runTest {
+        val dao = FakeAppDao(
+            listOf(entity("ghost", position = 5))
+        )
         val repository = NetworkAppRepository(
-            FakeCatalogApi { Response.error(500, ResponseBody.create(null, "boom")) },
-            FakeAppDao()
+            FakeCatalogApi { Response.success(catalog) },
+            dao
         )
 
         repository.loadCatalog()
 
-        assertTrue(repository.apps.first().isEmpty())
-        assertNull(repository.observeApp("browser").first())
+        val ids = repository.apps.first().map { it.id }
+        assertEquals(catalog.map { it.id }, ids)
+        assertFalse("ghost должен исчезнуть из каталога", "ghost" in ids)
     }
 
     @Test
-    fun loadCatalog_networkFailure_doesNotCrashAndKeepsCache() = runTest {
-        val dao = FakeAppDao()
-        val repository = NetworkAppRepository(FakeCatalogApi { throw IOException("нет сети") }, dao)
+    fun loadCatalog_httpError_keepsExistingRows() = runTest {
+        val dao = FakeAppDao(listOf(entity("browser", isInWishlist = true)))
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.error(500, ResponseBody.create(null, "boom")) },
+            dao
+        )
 
         repository.loadCatalog()
 
-        assertTrue(repository.apps.first().isEmpty())
+        val apps = repository.apps.first()
+        assertEquals(1, apps.size)
+        assertEquals("browser", apps.first().id)
+        assertTrue("ошибка сети не должна стирать вишлист", apps.first().isInWishlist)
+    }
+
+    @Test
+    fun loadCatalog_networkFailure_keepsExistingRows() = runTest {
+        val dao = FakeAppDao(listOf(entity("browser")))
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { throw IOException("нет сети") },
+            dao
+        )
+
+        repository.loadCatalog()
+
+        assertEquals(listOf("browser"), repository.apps.first().map { it.id })
+    }
+
+    @Test
+    fun loadCatalog_emptyBody_keepsExistingRows() = runTest {
+        val dao = FakeAppDao(listOf(entity("browser")))
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(emptyList<CatalogAppDto>()) },
+            dao
+        )
+
+        repository.loadCatalog()
+
+        assertEquals(listOf("browser"), repository.apps.first().map { it.id })
     }
 
     @Test
@@ -98,79 +156,158 @@ class NetworkAppRepositoryTest {
     }
 
     @Test
-    fun emptyBody_keepsExistingCatalog() = runTest {
-        val dao = FakeAppDao()
-        val repository = NetworkAppRepository(FakeCatalogApi { Response.success(catalog) }, dao)
-        repository.loadCatalog()
-
-        val emptyApi = NetworkAppRepository(
-            FakeCatalogApi { Response.success(emptyList<CatalogAppDto>()) },
-            dao
-        )
-        emptyApi.loadCatalog()
-
-        assertEquals(catalog.size, repository.apps.first().size)
-    }
-
-    @Test
-    fun setFavorite_updatesNewFieldAndFavoritesSubscription() = runTest {
+    fun observeApp_returnsNullForUnknownId() = runTest {
         val repository = NetworkAppRepository(
             FakeCatalogApi { Response.success(catalog) },
             FakeAppDao()
         )
         repository.loadCatalog()
 
-        repository.setFavorite("browser", true)
-
-        assertTrue(repository.observeApp("browser").first()!!.isFavorite)
-        assertEquals(listOf("browser"), repository.observeFavorites().first().map { it.id })
-
-        repository.setFavorite("browser", false)
-
-        assertTrue(repository.observeFavorites().first().isEmpty())
+        assertNull(repository.observeApp("unknown").first())
+        assertEquals("Почта", repository.observeApp("mail").first()?.name)
     }
 
     @Test
-    fun reloadCatalog_doesNotResetFavoriteMark() = runTest {
-        val dao = FakeAppDao()
-        val repository = NetworkAppRepository(FakeCatalogApi { Response.success(catalog) }, dao)
+    fun toggleWishlist_flipsStatusInRoom() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
         repository.loadCatalog()
+
+        assertFalse(repository.observeApp("browser").first()!!.isInWishlist)
+
+        repository.toggleWishlist("browser")
+        assertTrue(repository.observeApp("browser").first()!!.isInWishlist)
+
+        repository.toggleWishlist("browser")
+        assertFalse(repository.observeApp("browser").first()!!.isInWishlist)
+    }
+
+    @Test
+    fun toggleWishlist_unknownId_doesNothing() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+
+        repository.toggleWishlist("unknown")
+
+        assertNull(repository.observeApp("unknown").first())
+    }
+
+    @Test
+    fun wishlistMark_survivesCatalogReload() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+        repository.toggleWishlist("gallery")
+
+        repository.loadCatalog() // повторная загрузка каталога с сервера
+
+        val gallery = repository.observeApp("gallery").first()!!
+        assertTrue("обновление каталога не должно затирать вишлист", gallery.isInWishlist)
+        assertFalse(repository.observeApp("mail").first()!!.isInWishlist)
+    }
+
+    @Test
+    fun setFavorite_updatesFlagAndFavoritesFlow() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+        assertTrue(repository.observeFavorites().first().isEmpty())
+
         repository.setFavorite("mail", true)
 
-        // повторная загрузка того же каталога: контент обновился, отметка осталась
+        assertEquals(listOf("mail"), repository.observeFavorites().first().map { it.id })
+        assertTrue(repository.observeApp("mail").first()!!.isFavorite)
+        assertFalse(repository.observeApp("browser").first()!!.isFavorite)
+
+        repository.setFavorite("mail", false)
+
+        assertTrue(repository.observeFavorites().first().isEmpty())
+        assertFalse(repository.observeApp("mail").first()!!.isFavorite)
+    }
+
+    @Test
+    fun favorites_areIndependentFromWishlist() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
         repository.loadCatalog()
 
-        val mail = repository.observeApp("mail").first()
-        assertTrue(mail!!.isFavorite)
+        repository.toggleWishlist("browser")
+        repository.setFavorite("mail", true)
+
+        val browser = repository.observeApp("browser").first()!!
+        val mail = repository.observeApp("mail").first()!!
+        assertTrue("вишлист браузера", browser.isInWishlist)
+        assertFalse("браузер не в понравившихся", browser.isFavorite)
+        assertTrue("почта в понравившихся", mail.isFavorite)
+        assertFalse("почта не в вишлисте", mail.isInWishlist)
         assertEquals(listOf("mail"), repository.observeFavorites().first().map { it.id })
     }
 
     @Test
-    fun reloadCatalog_updatesContentAndDeletesMissingApps() = runTest {
-        val dao = FakeAppDao()
-        val repository = NetworkAppRepository(FakeCatalogApi { Response.success(catalog) }, dao)
-        repository.loadCatalog()
-        repository.setFavorite("browser", true)
-
-        val updatedApi = NetworkAppRepository(
-            FakeCatalogApi {
-                Response.success(
-                    listOf(
-                        CatalogAppDto("browser", "Браузер 2", "Новое описание", "Интернет"),
-                        CatalogAppDto("maps", "Карты", "Карты мира", "Путешествия")
-                    )
-                )
-            },
-            dao
+    fun favoriteMark_survivesCatalogReload() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
         )
-        updatedApi.loadCatalog()
+        repository.loadCatalog()
+        repository.setFavorite("gallery", true)
 
-        val apps = repository.apps.first()
-        assertEquals(listOf("browser", "maps"), apps.map { it.id })
-        assertEquals("Браузер 2", apps.first().name)
-        assertEquals("Новое описание", apps.first().description)
-        // id тот же — отметка «Понравилось» сохранилась после обновления контента
-        assertTrue(apps.first().isFavorite)
+        repository.loadCatalog()
+
+        assertTrue(
+            "обновление каталога не должно затирать «Понравившиеся»",
+            repository.observeApp("gallery").first()!!.isFavorite
+        )
+    }
+
+    @Test
+    fun setFavorite_unknownId_doesNothing() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+
+        repository.setFavorite("unknown", true)
+
+        assertNull(repository.observeApp("unknown").first())
+        assertTrue(repository.observeFavorites().first().isEmpty())
+    }
+
+    @Test
+    fun similarApps_putsSameCategoryFirst_andExcludesCurrent() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+
+        val similar = repository.apps.first().similarApps("gallery", AppRepository.SIMILAR_APPS_LIMIT)
+
+        assertEquals(listOf("music", "browser", "mail"), similar.map { it.id })
+        assertTrue(similar.none { it.id == "gallery" })
+    }
+
+    @Test
+    fun similarApps_forUnknownApp_givesEmptyList() = runTest {
+        val repository = NetworkAppRepository(
+            FakeCatalogApi { Response.success(catalog) },
+            FakeAppDao()
+        )
+        repository.loadCatalog()
+
+        assertTrue(repository.apps.first().similarApps("unknown").isEmpty())
     }
 
     /** Retrofit-сервис без сети: ответ задаётся лямбдой конкретного теста. */

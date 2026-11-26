@@ -13,6 +13,9 @@ import ru.mobile.startapp.domain.repository.RatingRepository
  * Каталог в памяти для сквозных UI-тестов: тот же контракт [AppRepository],
  * но без сети и Room — данные доступны с первого кадра.
  *
+ * Вишлист меняется в этом же состоянии репозитория, поэтому отметка переживает
+ * возврат из карточки и повторное открытие в рамках теста.
+ *
  * Hilt-модуль с этой подменой объявлен внутри `NavigationFlowTest.TestBindings`:
  * так он действует только на нужный тест-класс и не конфликтует с продовым
  * `AppModule` в остальных инструментальных тестах.
@@ -22,11 +25,19 @@ class UiTestAppRepository(initial: List<App> = UiTestApps.catalog) : AppReposito
     private val _apps = MutableStateFlow(initial)
     override val apps: Flow<List<App>> = _apps.asStateFlow()
 
-    override fun observeFavorites(): Flow<List<App>> =
-        _apps.map { apps -> apps.filter(App::isFavorite) }
-
     override fun observeApp(appId: String): Flow<App?> =
         _apps.map { apps -> apps.firstOrNull { it.id == appId } }
+
+    override fun observeFavorites(): Flow<List<App>> =
+        _apps.map { apps -> apps.filter { it.isFavorite } }
+
+    override suspend fun toggleWishlist(appId: String) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
+    }
 
     override suspend fun setFavorite(appId: String, isFavorite: Boolean) {
         _apps.update { apps ->

@@ -5,7 +5,6 @@ plugins {
     // kapt в AGP 9: built-in Kotlin не совместим с org.jetbrains.kotlin.kapt,
     // штатный путь — com.android.legacy-kapt
     alias(libs.plugins.android.legacy.kapt)
-    // Room-кодогенерация — через KSP (kapt в Room 2.8 устарел)
     alias(libs.plugins.ksp)
 }
 

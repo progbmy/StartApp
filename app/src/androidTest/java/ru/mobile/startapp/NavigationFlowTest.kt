@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -130,6 +131,41 @@ class NavigationFlowTest {
     }
 
     @Test
+    fun wishlist_togglesIcon_andSurvivesCardReopen() {
+        openCard(UiTestApps.browser)
+
+        composeRule.onNodeWithContentDescription(text(R.string.wishlist_add)).performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithContentDescription(text(R.string.wishlist_remove))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
+        awaitNode(text(R.string.list_ratings_title))
+
+        openCard(UiTestApps.browser)
+
+        composeRule
+            .onNodeWithContentDescription(text(R.string.wishlist_remove))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun favorites_togglesButton_andSurvivesCardReopen() {
+        openCard(UiTestApps.browser)
+
+        composeRule.onNodeWithText(text(R.string.favorite_add)).performScrollTo().performClick()
+        awaitNode(text(R.string.favorite_remove))
+
+        composeRule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
+        awaitNode(text(R.string.list_ratings_title))
+
+        openCard(UiTestApps.browser)
+
+        composeRule.onNodeWithText(text(R.string.favorite_remove)).assertIsDisplayed()
+    }
+
+    @Test
     fun install_runsFromStartToInstalled() {
         openCard(UiTestApps.browser)
 
@@ -154,31 +190,6 @@ class NavigationFlowTest {
 
         composeRule.onNodeWithText(text(R.string.app_details_download)).assertIsDisplayed()
         composeRule.onNodeWithText(text(R.string.app_details_installed)).assertDoesNotExist()
-    }
-
-    @Test
-    fun favorite_addsAppToFavorites_andFilterShowsIt() {
-        openCard(UiTestApps.browser)
-
-        // кнопка на карточке переключает новое поле в БД
-        composeRule.onNodeWithText(text(R.string.favorite_add)).performScrollTo().performClick()
-        awaitNode(text(R.string.favorite_remove))
-
-        // возвращаемся в список и включаем фильтр «Понравившиеся»
-        composeRule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
-        awaitNode(text(R.string.list_ratings_title))
-        composeRule
-            .onNodeWithContentDescription(text(R.string.favorite_filter_show))
-            .performClick()
-
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText(UiTestApps.mail.name)
-                .fetchSemanticsNodes().isEmpty()
-        }
-        composeRule.onNodeWithText(UiTestApps.browser.name).assertExists()
-        composeRule
-            .onNodeWithContentDescription(text(R.string.favorite_filter_hide))
-            .assertExists()
     }
 
     /**

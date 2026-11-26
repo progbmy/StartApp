@@ -14,9 +14,15 @@ import ru.mobile.startapp.domain.repository.AppRepository
 /**
  * Реализация [AppRepository] на демо-данных в памяти.
  *
- * Повторяет контракт БД-реализации без Room: хранит каталог в [MutableStateFlow],
- * отдаёт подписки на весь список и на «Понравившиеся», умеет менять отметку
- * «Понравилось». Используется в юнит-тестах и как запасной источник данных.
+ * Слой данных:
+ * 1. Читает жёстко заданные DTO из [DemoAppDataSource].
+ * 2. Конвертирует их через [ru.mobile.startapp.data.mapper.AppMapper]
+ *    в доменные модели.
+ * 3. Отдаёт доменные модели через [MutableStateFlow] представлению.
+ *
+ * Используется в юнит-тестах и как пример альтернативного источника.
+ * Вишлист здесь тоже живёт в состоянии репозитория и переживает пересоздание
+ * ViewModel, но не перезапуск процесса — этим отличается от Room-реализации.
  */
 class DemoAppRepositoryImpl @Inject constructor() : AppRepository {
 
@@ -24,11 +30,19 @@ class DemoAppRepositoryImpl @Inject constructor() : AppRepository {
 
     override val apps: Flow<List<App>> = _apps.asStateFlow()
 
-    override fun observeFavorites(): Flow<List<App>> =
-        _apps.map { apps -> apps.filter(App::isFavorite) }
-
     override fun observeApp(appId: String): Flow<App?> =
         _apps.map { apps -> apps.firstOrNull { it.id == appId } }
+
+    override fun observeFavorites(): Flow<List<App>> =
+        _apps.map { apps -> apps.filter { it.isFavorite } }
+
+    override suspend fun toggleWishlist(appId: String) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
+    }
 
     override suspend fun setFavorite(appId: String, isFavorite: Boolean) {
         _apps.update { apps ->

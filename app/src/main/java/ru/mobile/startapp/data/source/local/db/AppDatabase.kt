@@ -4,22 +4,20 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 
 /**
- * Локальная БД каталога.
+ * База данных приложения: одна таблица каталога.
  *
- * Схема — одна таблица [AppEntity]. Версия 1: добавление поля `isFavorite`
- * к уже существующим полям приложения.
+ * `exportSchema = false` — схема ещё учебная. Версия 3: добавлена колонка
+ * `isFavorite` («Понравившиеся»); version 2 отличалась от отменённой version-1
+ * колонкой `isInWishlist`, поэтому при обновлении поверх старой БД Room
+ * пересоздаёт таблицу (см. `fallbackToDestructiveMigration`
+ * в [ru.mobile.startapp.di.DatabaseModule]).
  */
 @Database(
     entities = [AppEntity::class],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun appDao(): AppDao
-
-    companion object {
-
-        const val NAME = "startapp.db"
-    }
 }

@@ -22,9 +22,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -66,16 +68,25 @@ fun AppDetailScreen(
     uiState: AppDetailUiState,
     snackbarHostState: SnackbarHostState,
     onInstallClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
     onSimilarAppClick: (App) -> Unit,
+    onWishlistClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val title = (uiState as? AppDetailUiState.Content)?.app?.name.orEmpty()
+    val content = uiState as? AppDetailUiState.Content
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { DetailToolBar(title = title, onBack = onBack) },
+        topBar = {
+            DetailToolBar(
+                title = content?.app?.name.orEmpty(),
+                isInWishlist = content?.isInWishlist == true,
+                showWishlist = content != null,
+                onWishlistClick = onWishlistClick,
+                onBack = onBack
+            )
+        },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
         when (uiState) {
@@ -91,9 +102,10 @@ fun AppDetailScreen(
                 app = uiState.app,
                 similarApps = uiState.similarApps,
                 installState = uiState.installState,
+                isFavorite = uiState.isFavorite,
                 onInstallClick = onInstallClick,
-                onFavoriteClick = onFavoriteClick,
                 onSimilarAppClick = onSimilarAppClick,
+                onFavoriteClick = onFavoriteClick,
                 modifier = Modifier.padding(innerPadding)
             )
         }
@@ -101,11 +113,22 @@ fun AppDetailScreen(
 }
 
 /**
- * Тулбар карточки: кнопка «назад» и название приложения.
+ * Тулбар карточки: кнопка «назад», название приложения и иконка вишлиста.
+ *
+ * Иконка закрашенная, когда приложение уже в вишлисте, и контурная — когда нет.
+ * Состояние приходит из ViewModel, поэтому после клика оно меняется само,
+ * как только Room пришлёт обновлённую строку.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DetailToolBar(title: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
+private fun DetailToolBar(
+    title: String,
+    isInWishlist: Boolean,
+    showWishlist: Boolean,
+    onWishlistClick: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     TopAppBar(
         modifier = modifier,
         title = {
@@ -124,10 +147,27 @@ private fun DetailToolBar(title: String, onBack: () -> Unit, modifier: Modifier 
                 )
             }
         },
+        actions = {
+            if (showWishlist) {
+                IconButton(onClick = onWishlistClick) {
+                    Icon(
+                        imageVector = if (isInWishlist) {
+                            Icons.Default.Star
+                        } else {
+                            Icons.Default.StarBorder
+                        },
+                        contentDescription = stringResource(
+                            if (isInWishlist) R.string.wishlist_remove else R.string.wishlist_add
+                        )
+                    )
+                }
+            }
+        },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
     )
 }
@@ -141,9 +181,10 @@ private fun DetailContent(
     app: App,
     similarApps: List<App>,
     installState: InstallState,
+    isFavorite: Boolean,
     onInstallClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
     onSimilarAppClick: (App) -> Unit,
+    onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -207,10 +248,10 @@ private fun DetailContent(
             onInstallClick = onInstallClick
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         FavoriteButton(
-            isFavorite = app.isFavorite,
+            isFavorite = isFavorite,
             onFavoriteClick = onFavoriteClick
         )
 
@@ -334,10 +375,10 @@ private fun InstallButton(
 }
 
 /**
- * Кнопка «Понравившиеся»: добавляет приложение в избранное и обратно.
+ * Кнопка «Понравившиеся»: добавление приложения в список понравившихся.
  *
- * Состояние приходит из БД ([App.isFavorite]), а клик только просит ViewModel
- * обновить поле — после UPDATE Room сам пришлёт новое состояние.
+ * Подпись и иконка зависят от [isFavorite]; клик только сообщает ViewModel,
+ * что пользователь нажал, — запись в БД и обновление состояния происходят там.
  */
 @Composable
 private fun FavoriteButton(
@@ -353,8 +394,11 @@ private fun FavoriteButton(
             imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
             contentDescription = null,
             modifier = Modifier.size(18.dp),
-            tint = if (isFavorite) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.primary
+            tint = if (isFavorite) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            }
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -490,8 +534,49 @@ private fun AppDetailContentPreview() {
             ),
             snackbarHostState = remember { SnackbarHostState() },
             onInstallClick = {},
-            onFavoriteClick = {},
             onSimilarAppClick = {},
+            onWishlistClick = {},
+            onFavoriteClick = {},
+            onBack = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Карточка: в вишлисте")
+@Composable
+private fun AppDetailWishlistPreview() {
+    StartAppTheme {
+        AppDetailScreen(
+            uiState = AppDetailUiState.Content(
+                app = demoAppsPreview[0].copy(isInWishlist = true),
+                similarApps = emptyList(),
+                isInWishlist = true
+            ),
+            snackbarHostState = remember { SnackbarHostState() },
+            onInstallClick = {},
+            onSimilarAppClick = {},
+            onWishlistClick = {},
+            onFavoriteClick = {},
+            onBack = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Карточка: в понравившихся")
+@Composable
+private fun AppDetailFavoritePreview() {
+    StartAppTheme {
+        AppDetailScreen(
+            uiState = AppDetailUiState.Content(
+                app = demoAppsPreview[0].copy(isFavorite = true),
+                similarApps = emptyList(),
+                isFavorite = true
+            ),
+            snackbarHostState = remember { SnackbarHostState() },
+            onInstallClick = {},
+            onSimilarAppClick = {},
+            onWishlistClick = {},
+            onFavoriteClick = {},
             onBack = {}
         )
     }
@@ -505,8 +590,9 @@ private fun AppDetailNotFoundPreview() {
             uiState = AppDetailUiState.NotFound,
             snackbarHostState = remember { SnackbarHostState() },
             onInstallClick = {},
-            onFavoriteClick = {},
             onSimilarAppClick = {},
+            onWishlistClick = {},
+            onFavoriteClick = {},
             onBack = {}
         )
     }

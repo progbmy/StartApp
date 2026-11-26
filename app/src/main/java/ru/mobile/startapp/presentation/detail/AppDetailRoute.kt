@@ -55,8 +55,9 @@ fun AppDetailRoute(
         uiState = uiState,
         snackbarHostState = snackbarHostState,
         onInstallClick = viewModel::onInstallClick,
-        onFavoriteClick = viewModel::onFavoriteClick,
         onSimilarAppClick = onSimilarAppClick,
+        onWishlistClick = viewModel::toggleWishlist,
+        onFavoriteClick = viewModel::toggleFavorite,
         onBack = onBack,
         modifier = modifier
     )

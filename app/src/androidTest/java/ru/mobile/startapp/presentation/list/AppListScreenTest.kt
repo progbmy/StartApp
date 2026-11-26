@@ -11,7 +11,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -47,8 +46,6 @@ class AppListScreenTest {
     private fun setScreen(
         uiState: AppListUiState,
         onAppClick: (App) -> Unit = {},
-        onFavoriteClick: (App) -> Unit = {},
-        onToggleFavorites: () -> Unit = {},
         onRerunRatings: () -> Unit = {}
     ) {
         composeRule.setContent {
@@ -56,8 +53,6 @@ class AppListScreenTest {
                 AppListScreen(
                     uiState = uiState,
                     onAppClick = onAppClick,
-                    onFavoriteClick = onFavoriteClick,
-                    onToggleFavorites = onToggleFavorites,
                     onRerunRatings = onRerunRatings
                 )
             }
@@ -69,15 +64,13 @@ class AppListScreenTest {
         ratings: Map<String, Float> = emptyMap(),
         sequential: RatingsLoadResult? = null,
         parallel: RatingsLoadResult? = null,
-        runningMode: RatingLoadMode? = null,
-        favoritesOnly: Boolean = false
+        runningMode: RatingLoadMode? = null
     ) = AppListUiState.Content(
         apps = apps,
         ratings = ratings,
         sequential = sequential,
         parallel = parallel,
-        runningMode = runningMode,
-        favoritesOnly = favoritesOnly
+        runningMode = runningMode
     )
 
     private fun seconds(value: Float): String =
@@ -191,52 +184,5 @@ class AppListScreenTest {
         composeRule.onNodeWithText(context.getString(R.string.list_ratings_retry)).performClick()
 
         assertTrue("кнопка «Замерить заново» должна вызывать колбэк", retried == 1)
-    }
-
-    @Test
-    fun favoriteIcon_onCard_reportsClickedApp() {
-        var clicked: App? = null
-        setScreen(
-            content(apps = listOf(UiTestApps.browser)),
-            onFavoriteClick = { clicked = it }
-        )
-
-        composeRule
-            .onNodeWithContentDescription(context.getString(R.string.favorite_add_content_desc))
-            .performClick()
-
-        assertEquals("browser", clicked?.id)
-    }
-
-    @Test
-    fun favoriteIcon_isFilled_forFavoriteApp() {
-        setScreen(content(apps = listOf(UiTestApps.browser.copy(isFavorite = true))))
-
-        composeRule
-            .onNodeWithContentDescription(context.getString(R.string.favorite_remove_content_desc))
-            .assertExists()
-    }
-
-    @Test
-    fun toolbarFilter_togglesAndShowsEmptyFavoritesState() {
-        var toggles = 0
-        setScreen(content(apps = emptyList(), favoritesOnly = true), onToggleFavorites = { toggles++ })
-
-        composeRule.onNodeWithText(context.getString(R.string.favorite_empty)).assertIsDisplayed()
-
-        composeRule
-            .onNodeWithContentDescription(context.getString(R.string.favorite_filter_hide))
-            .performClick()
-
-        assertEquals(1, toggles)
-    }
-
-    @Test
-    fun toolbarFilter_showsShowFilterDescription_whenDisabled() {
-        setScreen(content())
-
-        composeRule
-            .onNodeWithContentDescription(context.getString(R.string.favorite_filter_show))
-            .assertExists()
     }
 }

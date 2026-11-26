@@ -3,18 +3,21 @@ package ru.mobile.startapp.data
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.mobile.startapp.data.mapper.toDomainList
 import ru.mobile.startapp.data.source.local.DemoAppDataSource
+import ru.mobile.startapp.domain.App
+import ru.mobile.startapp.domain.repository.AppRepository
+import ru.mobile.startapp.domain.similarApps
 
-/** Демо-репозиторий в памяти: каталог, подписки и отметка «Понравилось». */
 class DemoAppRepositoryTest {
 
     private val repository = DemoAppRepositoryImpl()
 
-    private val demoApps: List<ru.mobile.startapp.domain.App> =
+    private val demoApps: List<App> =
         DemoAppDataSource.apps.toDomainList()
 
     @Test
@@ -29,39 +32,64 @@ class DemoAppRepositoryTest {
     }
 
     @Test
-    fun observeFavorites_isEmptyInitially() = runTest {
-        assertTrue(repository.observeFavorites().first().isEmpty())
+    fun similarApps_doesNotContainCurrentApp() = runTest {
+        val similar = repository.apps.first().similarApps("gallery")
+        assertTrue(similar.none { it.id == "gallery" })
     }
 
     @Test
-    fun setFavorite_addsAndRemovesAppFromFavorites() = runTest {
-        repository.setFavorite("browser", true)
-
-        val favorites = repository.observeFavorites().first()
-        assertEquals(listOf("browser"), favorites.map { it.id })
-        assertTrue(favorites.single().isFavorite)
-
-        repository.setFavorite("browser", false)
-
-        assertTrue(repository.observeFavorites().first().isEmpty())
+    fun similarApps_putsSameCategoryFirst() = runTest {
+        val similar = repository.apps.first().similarApps("gallery")
+        assertEquals("music", similar.first().id)
     }
 
     @Test
-    fun setFavorite_doesNotTouchOtherApps() = runTest {
-        repository.setFavorite("browser", true)
-
-        val browser = repository.observeApp("browser").first()
-        val mail = repository.observeApp("mail").first()
-
-        assertTrue(browser!!.isFavorite)
-        assertTrue(!mail!!.isFavorite)
-        assertEquals(demoApps.size, repository.apps.first().size)
+    fun similarApps_respectsLimit() = runTest {
+        val apps = repository.apps.first()
+        assertEquals(AppRepository.SIMILAR_APPS_LIMIT, apps.similarApps("gallery").size)
+        assertEquals(2, apps.similarApps("gallery", limit = 2).size)
     }
 
     @Test
-    fun setFavorite_unknownApp_isNoOp() = runTest {
-        repository.setFavorite("unknown", true)
+    fun similarApps_unknownAppGivesEmptyList() = runTest {
+        assertTrue(repository.apps.first().similarApps("unknown").isEmpty())
+    }
+
+    @Test
+    fun toggleWishlist_marksOnlySelectedApp_andFlipsBack() = runTest {
+        assertFalse(repository.observeApp("gallery").first()!!.isInWishlist)
+
+        repository.toggleWishlist("gallery")
+
+        val gallery = repository.observeApp("gallery").first()!!
+        assertTrue(gallery.isInWishlist)
+        // остальные поля не пострадали
+        assertEquals(demoApps.first { it.id == "gallery" }.name, gallery.name)
+        assertFalse(repository.observeApp("music").first()!!.isInWishlist)
+
+        repository.toggleWishlist("gallery")
+        assertFalse(repository.observeApp("gallery").first()!!.isInWishlist)
+    }
+
+    @Test
+    fun toggleWishlist_unknownApp_doesNothing() = runTest {
+        repository.toggleWishlist("unknown")
 
         assertEquals(demoApps, repository.apps.first())
+    }
+
+    @Test
+    fun setFavorite_fillsFavoritesFlowAndFlipsBack() = runTest {
+        assertTrue(repository.observeFavorites().first().isEmpty())
+
+        repository.setFavorite("gallery", true)
+
+        assertEquals(listOf("gallery"), repository.observeFavorites().first().map { it.id })
+        assertTrue(repository.observeApp("gallery").first()!!.isFavorite)
+        assertFalse(repository.observeApp("music").first()!!.isFavorite)
+
+        repository.setFavorite("gallery", false)
+
+        assertTrue(repository.observeFavorites().first().isEmpty())
     }
 }

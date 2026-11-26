@@ -45,7 +45,11 @@ sealed interface AppDetailUiState {
     data class Content(
         val app: App,
         val similarApps: List<App>,
-        val installState: InstallState = InstallState.NotInstalled
+        val installState: InstallState = InstallState.NotInstalled,
+        /** Добавлено ли приложение в вишлист — иконка в тулбаре смотрит сюда. */
+        val isInWishlist: Boolean = false,
+        /** Добавлено ли приложение в «Понравившиеся» — состояние кнопки под установкой. */
+        val isFavorite: Boolean = false
     ) : AppDetailUiState
 
     data object NotFound : AppDetailUiState
@@ -60,6 +64,11 @@ enum class AppDetailEvent { InstallStarted, InstallFinished, InstallCancelled }
  * [AppRepository] подставляется через Hilt DI.
  * id приложения приходит из аргументов маршрута через [SavedStateHandle],
  * поэтому экран восстанавливается после смерти процесса и поворота.
+ *
+ * Данные не запрашиваются разово: ViewModel подписан на [AppRepository.observeApp]
+ * (карточка) и [AppRepository.apps] (похожие приложения). После [toggleWishlist]
+ * Room присылает обновлённую строку, подписка пересобирает [uiState],
+ * и иконка в тулбаре меняется без ручного обновления состояния.
  */
 @HiltViewModel
 class AppDetailViewModel @Inject constructor(
@@ -73,12 +82,6 @@ class AppDetailViewModel @Inject constructor(
     val events: Flow<AppDetailEvent> = _events.receiveAsFlow()
 
     /**
-     * Каталог из БД. null — первая эмиссия ещё не пришла: экран показывает Loading,
-     * а не ложное «Приложение не найдено».
-     */
-    private val _apps = MutableStateFlow<List<App>?>(null)
-
-    /**
      * Прогресс установки — отдельный поток: это состояние UI, а не данные каталога.
      * В [AppDetailUiState.Content] оно попадает через [combine].
      */
@@ -87,34 +90,42 @@ class AppDetailViewModel @Inject constructor(
     /** Текущая эмуляция установки: держим ссылку, чтобы её можно было отменить. */
     private var installJob: Job? = null
 
+    /** Карточка из БД; null — строки ещё нет (холодный старт или чужой id). */
+    private val _app = MutableStateFlow<App?>(null)
+
+    /** Каталог целиком; null — первое значение из Room ещё не пришло. */
+    private val _catalog = MutableStateFlow<List<App>?>(null)
+
     init {
-        // Подписка на данные из БД: Room эмитит новое значение после каждого
-        // изменения (в том числе после setFavorite), UI перерисовывается сам.
+        // Подписка на данные из БД — через onEach + launchIn (требование задания):
+        // любое изменение строки в Room обновляет _app, а не только ручной запрос.
+        repository.observeApp(appId)
+            .onEach { app -> _app.value = app }
+            .launchIn(viewModelScope)
+
         repository.apps
-            .onEach { apps -> _apps.value = apps }
+            .onEach { apps -> _catalog.value = apps }
             .launchIn(viewModelScope)
     }
 
     val uiState: StateFlow<AppDetailUiState> = combine(
-        _apps,
+        _app,
+        _catalog,
         _installState
-    ) { apps, installState ->
+    ) { app, apps, installState ->
         when {
-            apps == null -> AppDetailUiState.Loading
+            app != null -> AppDetailUiState.Content(
+                app = app,
+                similarApps = apps.orEmpty().similarApps(app.id),
+                installState = installState,
+                isInWishlist = app.isInWishlist,
+                isFavorite = app.isFavorite
+            )
 
-            else -> {
-                val app = apps.firstOrNull { it.id == appId }
-                if (app == null) {
-                    // каталог уже пришёл, но приложения с таким id в нём нет
-                    AppDetailUiState.NotFound
-                } else {
-                    AppDetailUiState.Content(
-                        app = app,
-                        similarApps = apps.similarApps(app.id),
-                        installState = installState
-                    )
-                }
-            }
+            // каталог ещё не пришёл в Room — показываем загрузку, а не «не найдено»
+            apps.isNullOrEmpty() -> AppDetailUiState.Loading
+
+            else -> AppDetailUiState.NotFound
         }
     }.stateIn(
         scope = viewModelScope,
@@ -123,15 +134,27 @@ class AppDetailViewModel @Inject constructor(
     )
 
     /**
-     * Кнопка «Понравившиеся»: переключает новое поле в БД.
+     * Клик по иконке вишлиста в тулбаре.
      *
-     * Состояние кнопки не хранится во ViewModel — после UPDATE Room пришлёт
-     * новое значение в [repository.apps], и `uiState` обновится подпиской.
+     * Состояние здесь не меняем: репозиторий переключает флаг в БД,
+     * Room инвалидирует запрос, обновление приходит через [uiState].
      */
-    fun onFavoriteClick() {
-        val app = _apps.value?.firstOrNull { it.id == appId } ?: return
+    fun toggleWishlist() {
         viewModelScope.launch {
-            repository.setFavorite(appId = app.id, isFavorite = !app.isFavorite)
+            repository.toggleWishlist(appId)
+        }
+    }
+
+    /**
+     * Клик по кнопке «В понравившиеся».
+     *
+     * Текущее значение берём из карточки, а запись идёт в БД; обновлённый
+     * `isFavorite` вернётся подпиской [observeApp] и перерисует кнопку.
+     */
+    fun toggleFavorite() {
+        val current = _app.value ?: return
+        viewModelScope.launch {
+            repository.setFavorite(appId, !current.isFavorite)
         }
     }
 

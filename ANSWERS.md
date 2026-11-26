@@ -235,111 +235,157 @@ adb logcat -s AppListViewModel    # тайминги обоих способов
 
 ---
 
-# ДЗ №11 — «Понравившиеся»: Entity БД, подписка на данные и кнопка в UI
+# ДЗ №11 — Wishlist: отметка «в вишлисте» в Room и иконка в тулбаре
+
+Задание сделано после `git revert` предыдущей реализации «Понравившихся»:
+каталог снова читается из Room, но пользовательская отметка называется
+`isInWishlist` и переключается иконкой в тулбаре карточки.
 
 ## Что сделано
 
-### 1. Новое поле в Entity БД (Room)
+### 1. Поле в Entity БД и доменной модели
 
-`data/source/local/db/AppEntity.kt` — таблица `apps`, добавлено поле
-`isFavorite: Boolean = false`. Оно хранится только в БД: каталог из сети
-складывается в эту же таблицу (`position` сохраняет порядок сервера).
-
-`data/source/local/db/AppDao.kt`:
+`data/source/local/db/AppEntity.kt` — таблица `apps`:
 
 ```kotlin
-@Query("SELECT * FROM apps ORDER BY position ASC")
-fun observeApps(): Flow<List<AppEntity>>
-
-@Query("SELECT * FROM apps WHERE isFavorite = 1 ORDER BY position ASC")
-fun observeFavorites(): Flow<List<AppEntity>>
-
-@Query("SELECT * FROM apps WHERE id = :appId LIMIT 1")
-fun observeApp(appId: String): Flow<AppEntity?>
-
-@Query("UPDATE apps SET isFavorite = :isFavorite WHERE id = :appId")
-suspend fun updateFavorite(appId: String, isFavorite: Boolean)
+@Entity(tableName = "apps")
+data class AppEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val description: String,
+    val category: String,
+    val developer: String,
+    val version: String,
+    val size: String,
+    val fullDescription: String,
+    val isInWishlist: Boolean = false,
+    val position: Int = 0
+)
 ```
 
-`upsertCatalog` (`@Transaction`) вставляет новые строки и обновляет контентные
-поля существующих, но **не трогает `isFavorite`** — отметки переживают
-перезагрузку каталога и перезапуск приложения.
-
-`AppDatabase` (version 1, таблица `apps`) и `di/DatabaseModule.kt`
-(`@Provides @Singleton` для базы и DAO) — Hilt-граф.
+`domain/App.kt` — добавлено `val isInWishlist: Boolean = false`. Поле хранится
+только в БД: сеть его не присылает, поэтому обновление каталога не должно
+его затирать.
 
 ### 2. Мапперы
 
 `data/mapper/AppMapper.kt`:
 
-- `CatalogAppDto.toEntity(position)` — сеть → Entity, `isFavorite = false`;
-- `AppEntity.toDomain()` — Entity → Domain, переносит `isFavorite`;
-- `App.toEntity()` — Domain → Entity;
+- `CatalogAppDto.toEntity(position)` — сеть → Entity, `isInWishlist = false`,
+  `position` из `mapIndexed`;
+- `AppEntity.toDomain()` — Entity → Domain, переносит `isInWishlist`;
+- `App.toEntity(position)` — Domain → Entity;
 - `List<AppEntity>.toDomainApps()` — список Entity → список Domain
   (имя отличается от `List<AppDto>.toDomainList()`, иначе после стирания
   дженериков совпадает JVM-сигнатура).
 
-В доменную модель `App` добавлено `isFavorite: Boolean = false`.
+### 3. DAO: обновление статуса
 
-### 3. Репозиторий: подписки и обновление поля
+`data/source/local/db/AppDao.kt`:
+
+```kotlin
+@Query("SELECT * FROM apps WHERE id = :id LIMIT 1")
+fun getAppDetails(id: String): Flow<AppEntity?>
+
+@Query("UPDATE apps SET isInWishlist = :isInWishlist WHERE id = :id")
+suspend fun updateWishlistStatus(id: String, isInWishlist: Boolean)
+```
+
+`upsertCatalog` (`@Transaction`) вставляет новые строки (`OnConflictStrategy.IGNORE`)
+и обновляет только контентные поля — `isInWishlist` не входит в UPDATE,
+поэтому отметка переживает перезагрузку каталога.
+
+### 4. Репозиторий: подписки и переключение
 
 `domain/repository/AppRepository.kt`:
 
 ```kotlin
-val apps: Flow<List<App>>                 // подписка на весь каталог
-fun observeFavorites(): Flow<List<App>>   // подписка на «Понравившиеся»
-fun observeApp(appId: String): Flow<App?> // подписка на одно приложение
-suspend fun setFavorite(appId: String, isFavorite: Boolean)
+val apps: Flow<List<App>>
+fun observeApp(appId: String): Flow<App?>
+suspend fun toggleWishlist(appId: String)
 ```
 
-`data/NetworkAppRepository.kt` — Single Source of Truth теперь Room:
-
-1. `init` грузит `GET /catalog` и пишет каталог в БД;
-2. `apps` / `observeFavorites` / `observeApp` читают Flow из DAO;
-3. `setFavorite` вызывает `AppDao.updateFavorite`;
-4. ошибка сети не затирает БД — подписчики продолжают видеть кэш.
-
-При повторной загрузке каталога контент обновляется, а `isFavorite` остаётся.
-
-### 4. Подписка во ViewModel через `onEach`–`launchIn`
-
-`AppDetailViewModel`:
+`data/NetworkAppRepository.kt`: Room — единственный источник правды.
 
 ```kotlin
-private val _apps = MutableStateFlow<List<App>?>(null)
+override val apps: Flow<List<App>> =
+    appDetailsDao.observeApps().map { it.toDomainApps() }
 
-init {
-    repository.apps
-        .onEach { apps -> _apps.value = apps }
-        .launchIn(viewModelScope)
+override fun observeApp(appId: String): Flow<App?> =
+    appDetailsDao.getAppDetails(appId).map { it?.toDomain() }
+
+override suspend fun toggleWishlist(appId: String) {
+    val currentEntity = appDetailsDao.getAppDetails(appId).first()
+    currentEntity?.let { appDetailsDao.updateWishlistStatus(appId, !it.isInWishlist) }
 }
 ```
 
-`uiState` собирается через `combine(_apps, _installState)`; нажатие
-кнопки вызывает `repository.setFavorite(...)`, после UPDATE Room сам эмитит
-новое значение — экран перерисовывается без ручного обновления состояния.
+Загрузка каталога из сети пишет ответ в Room; HTTP-ошибка, пустой ответ и
+сетевая ошибка оставляют прежние строки — отметки не теряются.
+Блок «Вам может понравиться» вынесен в расширение `List<App>.similarApps(appId)`
+(`domain/SimilarApps.kt`), потому что каталог теперь Flow, а не синхронный `StateFlow`.
 
-Та же схема в `AppListViewModel` (плюс фильтр `_favoritesOnly`).
+### 5. ViewModel: новое поле и подписка
 
-### 5. Кнопка в интерфейсе
+`presentation/detail/AppDetailViewModel.kt`:
 
-- `AppDetailScreen`: под «Установить» — кнопка `FavoriteButton`
-  («В понравившиеся» с контуром сердца → «В понравившихся» с красным сердцем).
-- `AppListScreen`: сердечко на каждой карточке (быстрое добавление)
-  и переключатель «Понравившиеся» в тулбаре — список показывает только
-  отмеченные приложения, при пустом списке выводится подсказка.
-- Новые строки — `favorite_add/remove`, `favorite_filter_show/hide`,
-  `favorite_empty*` в `strings.xml`.
+```kotlin
+data class Content(
+    val app: App,
+    val similarApps: List<App>,
+    val installState: InstallState = InstallState.NotInstalled,
+    val isInWishlist: Boolean = false
+) : AppDetailUiState
+
+val uiState = combine(
+    repository.observeApp(appId),
+    repository.apps,
+    _installState
+) { app, apps, installState ->
+    when {
+        app != null -> AppDetailUiState.Content(
+            app = app,
+            similarApps = apps.similarApps(app.id),
+            installState = installState,
+            isInWishlist = app.isInWishlist
+        )
+        apps.isEmpty() -> AppDetailUiState.Loading
+        else -> AppDetailUiState.NotFound
+    }
+}.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppDetailUiState.Loading)
+
+fun toggleWishlist() {
+    viewModelScope.launch { repository.toggleWishlist(appId) }
+}
+```
+
+Разовый запрос в состояние больше не пишет: после `toggleWishlist` Room
+инвалидирует `SELECT` и присылает новую строку в `observeApp`, `combine`
+пересобирает `Content`, иконка перерисовывается сама. Пустой каталог при
+холодном старте даёт `Loading`, а не «Приложение не найдено».
+
+### 6. Иконка в тулбаре
+
+`presentation/detail/AppDetailScreen.kt`: `DetailToolBar` получил
+`isInWishlist` и колбэк `onWishlistClick`; в `actions` — `IconButton`:
+
+- не добавлено → `Icons.Default.StarBorder`, contentDescription «Добавить в вишлист»;
+- добавлено → `Icons.Default.Star`, contentDescription «Убрать из вишлиста».
+
+Клик из `AppDetailRoute` уходит в `viewModel::toggleWishlist`. Иконка скрыта,
+пока карточка в `Loading`/`NotFound`. Новые строки — `wishlist_add`/`wishlist_remove`
+в `strings.xml`.
 
 ## Проверка
 
 | Проверка | Результат |
 |---|---|
-| `:app:testDebugUnitTest` | 67 тестов, 0 падений |
-| `:app:connectedDebugAndroidTest` (Medium_Phone_API_35) | 36 тестов, 0 падений |
-| Карточка QuickNote → «В понравившиеся» | кнопка стала «В понравившихся», сердце красное, карточка в списке — с залитым сердцем |
-| `force-stop` + повторный запуск → фильтр «Понравившиеся» | в списке только QuickNote — данные пришли из Room |
-| `run-as ru.mobile.startapp` + `sqlite3` по `databases/startapp.db` | таблица `apps` содержит `isFavorite INTEGER NOT NULL`, у QuickNote `isFavorite = 1`, всего 41 строка |
+| `:app:testDebugUnitTest` | 69 тестов, 0 падений |
+| `:app:connectedDebugAndroidTest` (Medium_Phone_API_35) | 33 теста, 0 падений |
+| Карточка QuickNote → иконка «Добавить в вишлист» | звезда стала закрашенной, contentDescription «Убрать из вишлиста» |
+| Назад → снова открыть QuickNote | состояние сохранено |
+| `force-stop` + повторный запуск → QuickNote | по-прежнему «Убрать из вишлиста» — отметка пришла из Room |
+| `run-as ru.mobile.startapp` + sqlite по `databases/startapp.db` (с `-wal`/`-shm`) | колонка `isInWishlist INTEGER NOT NULL`; `select id,name,isInWishlist from apps where isInWishlist=1` вернул QuickNote; всего 41 строка |
 
 ## Как воспроизвести
 
@@ -349,13 +395,170 @@ export JAVA_HOME='C:\Users\skute\.jdks\corretto-21.0.4'
 ./gradlew :app:assembleDebug :app:testDebugUnitTest
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n ru.mobile.startapp/.MainActivity
+# открыть карточку → нажать звезду в тулбаре → назад → открыть снова
 ```
 
-## Нюансы сборки
+## Нюансы
 
-1. Room 2.8.5 подключён через **KSP** (kapt в Room 2.8 устарел); Hilt остался
-   на `com.android.legacy-kapt` — обе кодогенерации в одном модуле работают.
-2. В `gradle.properties` добавлен `android.disallowKotlinSourceSets=false`:
-   KSP регистрирует сгенерированные исходники через `kotlin.sourceSets`,
-   а AGP 9 с built-in Kotlin это запрещает без флага.
+1. Room 2.8.5 подключён через **KSP** (`2.2.10-2.0.2`); Hilt остался на
+   `com.android.legacy-kapt` — обе кодогенерации в одном модуле работают.
+2. В `gradle.properties` нужен `android.disallowKotlinSourceSets=false`:
+   KSP регистрирует исходники через `kotlin.sourceSets`, AGP 9 с built-in Kotlin
+   это запрещает без флага.
+3. `@Upsert` не используется: он перезаписывает все колонки, и сетевой
+   `isInWishlist = false` стёр бы отметку. Вставка IGNORE + UPDATE контента
+   сохраняет пользовательское значение.
+4. `deleteMissing` вызывается только для непустого ответа сервера:
+   в SQLite `NOT IN ()` истинно для всех строк и удалил бы весь кеш.
+5. `AppDatabase` — `version = 2` и `fallbackToDestructiveMigration(true)`:
+   предыдущая (отменённая) ветка успела создать version-1 БД с колонкой
+   `isFavorite`, и без пересоздания таблицы Room упал бы на проверке схемы.
+   Проверено установкой поверх: `PRAGMA user_version = 2`, каталог
+   перезагрузился, вишлист работает. (После следующего задания версия стала 3 —
+   см. раздел «Понравившиеся».)
 
+---
+
+# ДЗ №11 (продолжение) — «Понравившиеся»: кнопка, поле isFavorite и подписка onEach–launchIn
+
+Постановка: «Реализуйте в интерфейсе новую кнопку, по клику на которую будете
+добавлять приложение в "Понравившиеся". Для этого надо добавить новое поле в
+Entity БД, поддержать изменения в мапперах и добавить в репозиторий методы
+подписки на данные из БД и метод обновления нового поля. Реализуйте подписку
+на данные из БД во ViewModel через onEach - launchIn».
+
+Отметка «Понравившиеся» сделана отдельным полем `isFavorite`, независимым от
+вишлиста (`isInWishlist`): обе живут в одной строке Room, но переключаются
+разными элементами интерфейса.
+
+## Что сделано
+
+### 1. Новое поле в Entity и доменной модели
+
+`data/source/local/db/AppEntity.kt`:
+
+```kotlin
+val isInWishlist: Boolean = false,
+val isFavorite: Boolean = false,   // «Понравившиеся»
+val position: Int = 0
+```
+
+`domain/App.kt` — `val isFavorite: Boolean = false`.
+
+### 2. Мапперы
+
+`data/mapper/AppMapper.kt`:
+
+- `CatalogAppDto.toEntity(position)` — `isFavorite = false` (сеть поле не отдаёт);
+- `AppEntity.toDomain()` — переносит `isFavorite`;
+- `App.toEntity(position)` — переносит `isFavorite`;
+- `List<AppEntity>.toDomainApps()` — без изменений, работает через `toDomain()`.
+
+`updateContent` в DAO не трогает ни `isInWishlist`, ни `isFavorite`, поэтому
+перезагрузка каталога сохраняет обе отметки.
+
+### 3. DAO
+
+```kotlin
+@Query("SELECT * FROM apps WHERE isFavorite = 1 ORDER BY position ASC")
+fun observeFavorites(): Flow<List<AppEntity>>
+
+@Query("UPDATE apps SET isFavorite = :isFavorite WHERE id = :id")
+suspend fun updateFavorite(id: String, isFavorite: Boolean)
+```
+
+### 4. Репозиторий
+
+`domain/repository/AppRepository.kt`:
+
+```kotlin
+fun observeFavorites(): Flow<List<App>>
+suspend fun setFavorite(appId: String, isFavorite: Boolean)
+```
+
+`NetworkAppRepository`:
+
+```kotlin
+override fun observeFavorites(): Flow<List<App>> =
+    appDetailsDao.observeFavorites().map { it.toDomainApps() }
+
+override suspend fun setFavorite(appId: String, isFavorite: Boolean) {
+    appDetailsDao.updateFavorite(appId, isFavorite)
+}
+```
+
+### 5. ViewModel: подписка через onEach–launchIn
+
+`presentation/detail/AppDetailViewModel.kt`:
+
+```kotlin
+private val _app = MutableStateFlow<App?>(null)          // карточка из БД
+private val _catalog = MutableStateFlow<List<App>?>(null) // каталог из БД
+
+init {
+    repository.observeApp(appId)
+        .onEach { app -> _app.value = app }
+        .launchIn(viewModelScope)
+
+    repository.apps
+        .onEach { apps -> _catalog.value = apps }
+        .launchIn(viewModelScope)
+}
+```
+
+`uiState` собирается через `combine(_app, _catalog, _installState)`;
+в `Content` добавлено `isFavorite: Boolean`.
+
+```kotlin
+fun toggleFavorite() {
+    val current = _app.value ?: return
+    viewModelScope.launch { repository.setFavorite(appId, !current.isFavorite) }
+}
+```
+
+Состояние вручную не подменяется: после `UPDATE` Room эмитит новую строку,
+`onEach` обновляет `_app`, `combine` пересобирает `Content`, кнопка
+перерисовывается сама.
+
+### 6. Кнопка в интерфейсе
+
+`presentation/detail/AppDetailScreen.kt` — под кнопкой «Установить»:
+
+- не отмечено → `OutlinedButton` с контурным сердцем и текстом «В понравившиеся»;
+- отмечено → залитое красное сердце и текст «В понравившихся».
+
+Клик из `AppDetailRoute` уходит в `viewModel::toggleFavorite`. Новые строки —
+`favorite_add`/`favorite_remove` в `strings.xml`.
+
+## Проверка
+
+| Проверка | Результат |
+|---|---|
+| `:app:testDebugUnitTest` | 77 тестов, 0 падений |
+| `:app:connectedDebugAndroidTest` (Medium_Phone_API_35) | 36 тестов, 0 падений |
+| Карточка QuickNote → «В понравившиеся» | подпись сменилась на «В понравившихся», сердце залито красным, звезда вишлиста осталась контурной |
+| `force-stop` + повторный запуск → QuickNote | «В понравившихся» сохранилось — значение пришло из Room |
+| SQLite на устройстве | `PRAGMA user_version = 3`; колонки `isInWishlist` и `isFavorite`; у QuickNote `isFavorite = 1, isInWishlist = 0`; всего 41 строка |
+
+## Как воспроизвести
+
+```bash
+cd C:/Kotlin/StartApp
+export JAVA_HOME='C:\Users\skute\.jdks\corretto-21.0.4'
+./gradlew :app:assembleDebug :app:testDebugUnitTest
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n ru.mobile.startapp/.MainActivity
+# открыть карточку → «В понравившиеся» → назад → открыть снова
+```
+
+## Нюансы
+
+1. `AppDatabase` — `version = 3`: добавлена колонка `isFavorite`; обновление
+   поверх version-2 БД пересоздаёт таблицу (`fallbackToDestructiveMigration`),
+   проверено установкой поверх.
+2. Вишлист и «Понравившиеся» независимы: юнит-тест
+   `favorites_areIndependentFromWishlist` и проверка на устройстве
+   (`isFavorite = 1` при `isInWishlist = 0`).
+3. `observeFavorites()` пока не используется на экране списка — метод добавлен
+   как часть контракта репозитория по заданию; подписка ViewModel идёт на
+   `observeApp` и `apps`.

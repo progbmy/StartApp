@@ -3,6 +3,7 @@ package ru.mobile.startapp.presentation.detail
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -98,6 +99,92 @@ class AppDetailViewModelTest {
         advanceUntilIdle()
 
         assertEquals(AppDetailUiState.NotFound, viewModel.uiState.value)
+    }
+
+    @Test
+    fun uiState_contentCarriesWishlistFlag() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isInWishlist)
+    }
+
+    @Test
+    fun toggleWishlist_updatesStateThroughSubscription() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+
+        assertTrue("после клика флаг должен приехать из репозитория", viewModel.content().isInWishlist)
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isInWishlist)
+    }
+
+    @Test
+    fun uiState_contentCarriesFavoriteFlag() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isFavorite)
+    }
+
+    @Test
+    fun toggleFavorite_updatesStateThroughOnEachSubscription() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        assertTrue(
+            "после клика isFavorite должен приехать из БД через observeApp",
+            viewModel.content().isFavorite
+        )
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.content().isFavorite)
+    }
+
+    @Test
+    fun wishlistAndFavorites_areIndependentInState() = runTest(dispatcher) {
+        val viewModel = viewModel(appId = "browser")
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+        assertTrue(viewModel.content().isInWishlist)
+        assertFalse(viewModel.content().isFavorite)
+
+        viewModel.toggleFavorite()
+        advanceUntilIdle()
+        assertTrue(viewModel.content().isInWishlist)
+        assertTrue(viewModel.content().isFavorite)
+    }
+
+    @Test
+    fun toggleWishlist_changesOnlyCurrentApp() = runTest(dispatcher) {
+        val repository = FakeAppRepository()
+        val viewModel = viewModel(appId = "browser", repository = repository)
+        subscribe(viewModel)
+        advanceUntilIdle()
+
+        viewModel.toggleWishlist()
+        advanceUntilIdle()
+
+        val mail = repository.apps.first().first { it.id == "mail" }
+        assertFalse("чужие приложения не должны попадать в вишлист", mail.isInWishlist)
     }
 
     @Test
@@ -279,60 +366,5 @@ class AppDetailViewModelTest {
         advanceUntilIdle()
 
         assertEquals(InstallState.Installed, viewModel.content().installState)
-    }
-
-    @Test
-    fun favoriteClick_addsAppToFavorites_andUpdatesState() = runTest(dispatcher) {
-        val viewModel = viewModel()
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        assertFalse(viewModel.content().app.isFavorite)
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertTrue("состояние должно прийти из БД через подписку", viewModel.content().app.isFavorite)
-    }
-
-    @Test
-    fun favoriteClick_togglesBack() = runTest(dispatcher) {
-        val viewModel = viewModel()
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-        assertTrue(viewModel.content().app.isFavorite)
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertFalse(viewModel.content().app.isFavorite)
-    }
-
-    @Test
-    fun favoriteClick_forUnknownApp_doesNothing() = runTest(dispatcher) {
-        val viewModel = viewModel(appId = "unknown")
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertEquals(AppDetailUiState.NotFound, viewModel.uiState.value)
-    }
-
-    @Test
-    fun favoriteChange_doesNotAffectInstallState() = runTest(dispatcher) {
-        val viewModel = viewModel()
-        subscribe(viewModel)
-        advanceUntilIdle()
-
-        viewModel.onFavoriteClick()
-        advanceUntilIdle()
-
-        assertEquals(InstallState.NotInstalled, viewModel.content().installState)
-        assertTrue(viewModel.content().app.isFavorite)
     }
 }

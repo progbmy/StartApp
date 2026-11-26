@@ -10,8 +10,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -34,14 +32,12 @@ sealed interface AppListUiState {
         val ratings: Map<String, Float> = emptyMap(),
         val sequential: RatingsLoadResult? = null,
         val parallel: RatingsLoadResult? = null,
-        val runningMode: RatingLoadMode? = null,
-        /** Включён фильтр «Понравившиеся»: показываем только отмеченные приложения. */
-        val favoritesOnly: Boolean = false
+        val runningMode: RatingLoadMode? = null
     ) : AppListUiState
 }
 
 /**
- * ViewModel списка: подписывается на каталог из БД (Room),
+ * ViewModel списка: подписывается на каталог из репозитория,
  * подгружает рейтинги двумя способами и отдаёт экрану готовое состояние.
  *
  * [AppRepository] и [LoadRatingsUseCase] подставляются через Hilt DI.
@@ -52,30 +48,19 @@ class AppListViewModel @Inject constructor(
     private val loadRatings: LoadRatingsUseCase
 ) : ViewModel() {
 
-    /** Последний каталог из БД: его обновляет подписка [onEach]–[launchIn]. */
-    private val _apps = MutableStateFlow<List<App>>(emptyList())
-
     /** Загрузка рейтингов — отдельное состояние: каталог живёт в репозитории. */
     private val _ratings = MutableStateFlow(RatingsState())
 
-    /** Фильтр «Понравившиеся» в тулбаре списка. */
-    private val _favoritesOnly = MutableStateFlow(false)
-
-    val uiState: StateFlow<AppListUiState> = combine(
-        _apps,
-        _ratings,
-        _favoritesOnly
-    ) { apps, ratings, favoritesOnly ->
+    val uiState: StateFlow<AppListUiState> = combine(repository.apps, _ratings) { apps, ratings ->
         if (apps.isEmpty()) {
             AppListUiState.Loading
         } else {
             AppListUiState.Content(
-                apps = if (favoritesOnly) apps.filter(App::isFavorite) else apps,
+                apps = apps,
                 ratings = ratings.ratings,
                 sequential = ratings.sequential,
                 parallel = ratings.parallel,
-                runningMode = ratings.runningMode,
-                favoritesOnly = favoritesOnly
+                runningMode = ratings.runningMode
             )
         }
     }.stateIn(
@@ -88,12 +73,6 @@ class AppListViewModel @Inject constructor(
     private var ratingsJob: Job? = null
 
     init {
-        // Подписка на данные из БД через onEach–launchIn: после setFavorite
-        // Room эмитит список, и экран сам перерисовывает «сердечки».
-        repository.apps
-            .onEach { apps -> _apps.value = apps }
-            .launchIn(viewModelScope)
-
         // ждём, пока репозиторий отдаст каталог, и сразу замеряем оба способа
         viewModelScope.launch {
             val apps = repository.apps.first { it.isNotEmpty() }
@@ -101,22 +80,9 @@ class AppListViewModel @Inject constructor(
         }
     }
 
-    /** Кнопка-сердечко на карточке списка: добавляет/убирает из «Понравившихся». */
-    fun onFavoriteClick(app: App) {
-        viewModelScope.launch {
-            repository.setFavorite(appId = app.id, isFavorite = !app.isFavorite)
-        }
-    }
-
-    /** Переключает фильтр «Понравившиеся» в тулбаре. */
-    fun onToggleFavorites() {
-        _favoritesOnly.update { it -> !it }
-    }
-
-    /** Кнопка «Замерить заново»: повторяет оба замера на полном каталоге. */
+    /** Кнопка «Замерить заново»: повторяет оба замера на текущем списке. */
     fun onRerunRatings() {
-        val apps = _apps.value
-        if (apps.isEmpty()) return
+        val apps = (uiState.value as? AppListUiState.Content)?.apps ?: return
         runBenchmark(apps)
     }
 

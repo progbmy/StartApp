@@ -26,13 +26,8 @@
     <string name="list_rating_content_desc">Рейтинг</string>
     <string name="app_details_similar">Вам может понравиться</string>
     <string name="app_details_not_found">Приложение не найдено</string>
-
+    <string name="wishlist_add">Добавить в вишлист</string>
+    <string name="wishlist_remove">Убрать из вишлиста</string>
     <string name="favorite_add">В понравившиеся</string>
     <string name="favorite_remove">В понравившихся</string>
-    <string name="favorite_add_content_desc">Добавить в понравившиеся</string>
-    <string name="favorite_remove_content_desc">Убрать из понравившихся</string>
-    <string name="favorite_filter_show">Показать понравившиеся</string>
-    <string name="favorite_filter_hide">Показать все приложения</string>
-    <string name="favorite_empty">Понравившихся приложений пока нет</string>
-    <string name="favorite_empty_hint">Отметьте приложение сердечком или кнопкой «В понравившиеся»</string>
 </resources>

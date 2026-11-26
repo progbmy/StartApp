@@ -3,7 +3,6 @@ package ru.mobile.startapp.testing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -24,8 +23,7 @@ object TestData {
     fun app(
         id: String,
         name: String = "Приложение $id",
-        category: String = "Интернет",
-        isFavorite: Boolean = false
+        category: String = "Интернет"
     ): App = App(
         id = id,
         name = name,
@@ -34,8 +32,7 @@ object TestData {
         developer = "StartApp Studio",
         version = "1.0",
         size = "10 МБ",
-        fullDescription = "Полное описание $id",
-        isFavorite = isFavorite
+        fullDescription = "Полное описание $id"
     )
 
     /** Каталог из пяти приложений: две штуки в категории «Медиа». */
@@ -67,11 +64,19 @@ class FakeAppRepository(initial: List<App> = TestData.catalog) : AppRepository {
         _apps.value = apps
     }
 
-    override fun observeFavorites(): Flow<List<App>> =
-        _apps.map { apps -> apps.filter(App::isFavorite) }
-
     override fun observeApp(appId: String): Flow<App?> =
         _apps.map { apps -> apps.firstOrNull { it.id == appId } }
+
+    override fun observeFavorites(): Flow<List<App>> =
+        _apps.map { apps -> apps.filter { it.isFavorite } }
+
+    override suspend fun toggleWishlist(appId: String) {
+        _apps.update { apps ->
+            apps.map { app ->
+                if (app.id == appId) app.copy(isInWishlist = !app.isInWishlist) else app
+            }
+        }
+    }
 
     override suspend fun setFavorite(appId: String, isFavorite: Boolean) {
         _apps.update { apps ->
@@ -83,32 +88,28 @@ class FakeAppRepository(initial: List<App> = TestData.catalog) : AppRepository {
 }
 
 /**
- * DAO в памяти для JVM-тестов репозитория: реализует контракт [AppDao],
- * но вместо Room хранит строки в [MutableStateFlow].
+ * Room-DAO в памяти: те же операции, что у настоящего [AppDao], но без Android.
  *
- * Наследуется от abstract class, поэтому унаследованный [AppDao.upsertCatalog]
- * работает поверх [insertNew] и [updateContent] — тест проверяет ту же логику,
- * что и продовая реализация DAO.
+ * Наследует [AppDao], поэтому [AppDao.upsertCatalog] проверяется на той же
+ * логике «вставка новых + обновление контента», что работает в приложении.
  */
-class FakeAppDao : AppDao() {
+class FakeAppDao(initial: List<AppEntity> = emptyList()) : AppDao() {
 
-    private val _entities = MutableStateFlow<List<AppEntity>>(emptyList())
+    private val rows = MutableStateFlow(initial)
 
     override fun observeApps(): Flow<List<AppEntity>> =
-        _entities.map { entities -> entities.sortedBy(AppEntity::position) }
+        rows.map { apps -> apps.sortedBy { it.position } }
+
+    override fun getAppDetails(id: String): Flow<AppEntity?> =
+        rows.map { apps -> apps.firstOrNull { it.id == id } }
 
     override fun observeFavorites(): Flow<List<AppEntity>> =
-        _entities.map { entities ->
-            entities.filter(AppEntity::isFavorite).sortedBy(AppEntity::position)
-        }
-
-    override fun observeApp(appId: String): Flow<AppEntity?> =
-        _entities.map { entities -> entities.firstOrNull { it.id == appId } }
+        rows.map { apps -> apps.filter { it.isFavorite }.sortedBy { it.position } }
 
     override suspend fun insertNew(apps: List<AppEntity>) {
-        _entities.update { current ->
-            val existingIds = current.mapTo(mutableSetOf(), AppEntity::id)
-            current + apps.filterNot { it.id in existingIds }
+        rows.update { current ->
+            val existingIds = current.map { it.id }.toSet()
+            current + apps.filter { it.id !in existingIds }
         }
     }
 
@@ -123,12 +124,10 @@ class FakeAppDao : AppDao() {
         fullDescription: String,
         position: Int
     ) {
-        _entities.update { entities ->
-            entities.map { entity ->
-                if (entity.id != id) {
-                    entity
-                } else {
-                    entity.copy(
+        rows.update { apps ->
+            apps.map { app ->
+                if (app.id == id) {
+                    app.copy(
                         name = name,
                         description = description,
                         category = category,
@@ -138,21 +137,32 @@ class FakeAppDao : AppDao() {
                         fullDescription = fullDescription,
                         position = position
                     )
+                } else {
+                    app
                 }
             }
         }
     }
 
-    override suspend fun updateFavorite(appId: String, isFavorite: Boolean) {
-        _entities.update { entities ->
-            entities.map { entity ->
-                if (entity.id == appId) entity.copy(isFavorite = isFavorite) else entity
+    override suspend fun updateWishlistStatus(id: String, isInWishlist: Boolean) {
+        rows.update { apps ->
+            apps.map { app ->
+                if (app.id == id) app.copy(isInWishlist = isInWishlist) else app
+            }
+        }
+    }
+
+    override suspend fun updateFavorite(id: String, isFavorite: Boolean) {
+        rows.update { apps ->
+            apps.map { app ->
+                if (app.id == id) app.copy(isFavorite = isFavorite) else app
             }
         }
     }
 
     override suspend fun deleteMissing(ids: List<String>) {
-        _entities.update { entities -> entities.filter { it.id in ids } }
+        // SQLite: `NOT IN ()` истинно для всех строк, поэтому пустой список удаляет всё
+        rows.update { apps -> if (ids.isEmpty()) emptyList() else apps.filter { it.id in ids } }
     }
 }
 
